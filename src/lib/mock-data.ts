@@ -45,6 +45,8 @@ export type Recommendation = {
   action: string;
   confidence: number;
   impact: string;
+  whyItMatters?: string;
+  savings?: string;
 };
 
 export const recommendations: Recommendation[] = [
@@ -57,6 +59,8 @@ export const recommendations: Recommendation[] = [
     action: "Reassign 4 visits between Marcus and Priya to save 74 miles.",
     confidence: 96,
     impact: "$310 fuel + 2.6 hrs saved",
+    whyItMatters: "Travel is your second-largest variable cost after labor. Small route inefficiencies compound weekly.",
+    savings: "$310 / week",
   },
   {
     id: "r2",
@@ -67,6 +71,8 @@ export const recommendations: Recommendation[] = [
     action: "Send proactive confirmation + offer 4:30pm alternate.",
     confidence: 82,
     impact: "$180 revenue protected",
+    whyItMatters: "Preventing a cancellation is 6x cheaper than filling the empty slot last-minute.",
+    savings: "$180 protected",
   },
   {
     id: "r3",
@@ -77,6 +83,8 @@ export const recommendations: Recommendation[] = [
     action: "Move Fri 2pm visit to Devon (available, certified).",
     confidence: 91,
     impact: "$220 OT avoided",
+    whyItMatters: "Overtime this week signals a scheduling pattern that will repeat next week if unaddressed.",
+    savings: "$220 OT",
   },
   {
     id: "r4",
@@ -87,6 +95,8 @@ export const recommendations: Recommendation[] = [
     action: "Offer to Priya (top match, 97% skill fit).",
     confidence: 97,
     impact: "Prevents 1 missed visit",
+    whyItMatters: "A missed recurring visit is the single strongest predictor of customer churn in the next 30 days.",
+    savings: "$260 revenue",
   },
   {
     id: "r5",
@@ -97,6 +107,8 @@ export const recommendations: Recommendation[] = [
     action: "Draft outreach for account owners.",
     confidence: 74,
     impact: "$4,200 MRR potential",
+    whyItMatters: "Expansion revenue from existing customers has a 4x higher close rate than new acquisition.",
+    savings: "$4,200 MRR",
   },
   {
     id: "r6",
@@ -107,6 +119,8 @@ export const recommendations: Recommendation[] = [
     action: "Distribute next week's on-call across 3 employees.",
     confidence: 68,
     impact: "Retention risk mitigated",
+    whyItMatters: "Replacing a trained field employee costs 1.5–2x their annual salary in ramp and lost productivity.",
+    savings: "Retention",
   },
 ];
 
@@ -224,4 +238,56 @@ export const completionSeries = [
   { week: "W4", completed: 96, missed: 4 },
   { week: "W5", completed: 97, missed: 3 },
   { week: "W6", completed: 97, missed: 3 },
+];
+
+export type HealthScore = {
+  label: string;
+  score: number; // 0..100
+  delta: string;
+  hint: string;
+};
+
+export const healthScores: HealthScore[] = [
+  { label: "Schedule health", score: 92, delta: "+4 pts", hint: "Coverage, conflicts, and buffer time." },
+  { label: "Employee utilization", score: 84, delta: "+3 pts", hint: "Billable time vs. capacity." },
+  { label: "Operational efficiency", score: 88, delta: "+2 pts", hint: "Composite of travel, labor, and completion." },
+  { label: "Customer coverage", score: 96, delta: "Stable", hint: "% of contracted visits scheduled." },
+  { label: "Travel optimization", score: 88, delta: "+2 pts", hint: "Actual miles vs. optimal routing." },
+  { label: "Labor efficiency", score: 81, delta: "+5 pts", hint: "Labor spend vs. revenue produced." },
+];
+
+export const laborCostSeries = [
+  { week: "W1", planned: 68000, actual: 70200 },
+  { week: "W2", planned: 69000, actual: 68400 },
+  { week: "W3", planned: 70000, actual: 68900 },
+  { week: "W4", planned: 71000, actual: 69100 },
+  { week: "W5", planned: 72000, actual: 69800 },
+  { week: "W6", planned: 73000, actual: 70400 },
+];
+
+export const travelSeries = [
+  { week: "W1", miles: 4200 },
+  { week: "W2", miles: 4050 },
+  { week: "W3", miles: 3880 },
+  { week: "W4", miles: 3720 },
+  { week: "W5", miles: 3610 },
+  { week: "W6", miles: 3440 },
+];
+
+export const overtimeSeries = [
+  { week: "W1", hours: 48 },
+  { week: "W2", hours: 41 },
+  { week: "W3", hours: 36 },
+  { week: "W4", hours: 31 },
+  { week: "W5", hours: 26 },
+  { week: "W6", hours: 22 },
+];
+
+export const aiSavingsSeries = [
+  { week: "W1", savings: 1800 },
+  { week: "W2", savings: 2350 },
+  { week: "W3", savings: 2740 },
+  { week: "W4", savings: 2980 },
+  { week: "W5", savings: 3220 },
+  { week: "W6", savings: 3410 },
 ];
