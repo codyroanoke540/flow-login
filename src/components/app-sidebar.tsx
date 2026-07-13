@@ -10,6 +10,7 @@ import {
   Plug,
   Settings,
   CalendarClock,
+  Radar,
 } from "lucide-react";
 
 import {
@@ -27,6 +28,7 @@ import {
 
 const primary = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Operations Center", url: "/operations", icon: Radar },
   { title: "Schedule", url: "/schedule", icon: CalendarDays },
   { title: "Employees", url: "/employees", icon: Users },
   { title: "Customers", url: "/customers", icon: Contact },
@@ -34,7 +36,7 @@ const primary = [
 ] as const;
 
 const intelligence = [
-  { title: "AI Assistant", url: "/ai", icon: Sparkles },
+  { title: "AI Recommendations", url: "/ai", icon: Sparkles },
   { title: "Automations", url: "/automations", icon: Workflow },
 ] as const;
 
