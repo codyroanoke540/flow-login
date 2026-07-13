@@ -152,12 +152,12 @@ function AuthPage() {
 
           <div className="mb-8">
             <h2 className="font-display text-3xl font-semibold tracking-tight text-foreground">
-              {mode === "signin" ? "Welcome back" : "Create your workspace"}
+              {mode === "signin" ? "Welcome back" : "Create your organization"}
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
               {mode === "signin"
-                ? "Sign in to continue to your Cadence workspace."
-                : "Start scheduling smarter in under two minutes."}
+                ? "Sign in to continue to your Cadence organization."
+                : "Companies use Cadence to run secure, isolated organizations for their operations."}
             </p>
           </div>
 
