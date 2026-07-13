@@ -16,6 +16,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/_app'
 import { Route as AuthenticatedAppScheduleRouteImport } from './routes/_authenticated/_app.schedule'
+import { Route as AuthenticatedAppEmployeesRouteImport } from './routes/_authenticated/_app.employees'
 import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authenticated/_app.dashboard'
 import { Route as AuthenticatedAppAiRouteImport } from './routes/_authenticated/_app.ai'
 
@@ -53,6 +54,12 @@ const AuthenticatedAppScheduleRoute =
     path: '/schedule',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppEmployeesRoute =
+  AuthenticatedAppEmployeesRouteImport.update({
+    id: '/employees',
+    path: '/employees',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppDashboardRoute =
   AuthenticatedAppDashboardRouteImport.update({
     id: '/dashboard',
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/ai': typeof AuthenticatedAppAiRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/employees': typeof AuthenticatedAppEmployeesRoute
   '/schedule': typeof AuthenticatedAppScheduleRoute
 }
 export interface FileRoutesByTo {
@@ -81,6 +89,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/ai': typeof AuthenticatedAppAiRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/employees': typeof AuthenticatedAppEmployeesRoute
   '/schedule': typeof AuthenticatedAppScheduleRoute
 }
 export interface FileRoutesById {
@@ -93,6 +102,7 @@ export interface FileRoutesById {
   '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/_app/ai': typeof AuthenticatedAppAiRoute
   '/_authenticated/_app/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/_authenticated/_app/employees': typeof AuthenticatedAppEmployeesRoute
   '/_authenticated/_app/schedule': typeof AuthenticatedAppScheduleRoute
 }
 export interface FileRouteTypes {
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ai'
     | '/dashboard'
+    | '/employees'
     | '/schedule'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -113,6 +124,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ai'
     | '/dashboard'
+    | '/employees'
     | '/schedule'
   id:
     | '__root__'
@@ -124,6 +136,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_app'
     | '/_authenticated/_app/ai'
     | '/_authenticated/_app/dashboard'
+    | '/_authenticated/_app/employees'
     | '/_authenticated/_app/schedule'
   fileRoutesById: FileRoutesById
 }
@@ -186,6 +199,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppScheduleRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/_app/employees': {
+      id: '/_authenticated/_app/employees'
+      path: '/employees'
+      fullPath: '/employees'
+      preLoaderRoute: typeof AuthenticatedAppEmployeesRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/_app/dashboard': {
       id: '/_authenticated/_app/dashboard'
       path: '/dashboard'
@@ -206,12 +226,14 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAiRoute: typeof AuthenticatedAppAiRoute
   AuthenticatedAppDashboardRoute: typeof AuthenticatedAppDashboardRoute
+  AuthenticatedAppEmployeesRoute: typeof AuthenticatedAppEmployeesRoute
   AuthenticatedAppScheduleRoute: typeof AuthenticatedAppScheduleRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAiRoute: AuthenticatedAppAiRoute,
   AuthenticatedAppDashboardRoute: AuthenticatedAppDashboardRoute,
+  AuthenticatedAppEmployeesRoute: AuthenticatedAppEmployeesRoute,
   AuthenticatedAppScheduleRoute: AuthenticatedAppScheduleRoute,
 }
 
