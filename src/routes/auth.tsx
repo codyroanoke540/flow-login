@@ -110,20 +110,20 @@ function AuthPage() {
 
         <div className="relative z-10 max-w-md">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium ring-1 ring-white/20 backdrop-blur">
-            <Sparkles className="h-3.5 w-3.5" /> AI Scheduling Platform
+            <Sparkles className="h-3.5 w-3.5" /> AI Operations Platform
           </div>
           <h1 className="font-display text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl">
-            Scheduling that thinks<br />before you do.
+            The AI Operating System<br />for service businesses.
           </h1>
           <p className="mt-5 text-base leading-relaxed text-white/80">
-            Cadence coordinates meetings, shifts, and resources across your entire
-            organisation — so your team stops managing calendars and starts running the business.
+            Cadence runs the operations of your business — scheduling, staffing,
+            dispatch, and optimization — so your team can focus on the work.
           </p>
 
           <ul className="mt-8 space-y-3 text-sm text-white/85">
             {[
-              "Auto-optimised meeting placement across time zones",
-              "Conflict-free shift and resource planning",
+              "Proactive AI recommendations across your operation",
+              "Optimized scheduling, dispatch, and workforce planning",
               "SOC 2 Type II, SSO, and audit-ready",
             ].map((item) => (
               <li key={item} className="flex items-start gap-3">
@@ -152,12 +152,12 @@ function AuthPage() {
 
           <div className="mb-8">
             <h2 className="font-display text-3xl font-semibold tracking-tight text-foreground">
-              {mode === "signin" ? "Welcome back" : "Create your workspace"}
+              {mode === "signin" ? "Welcome back" : "Create your organization"}
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
               {mode === "signin"
-                ? "Sign in to continue to your Cadence workspace."
-                : "Start scheduling smarter in under two minutes."}
+                ? "Sign in to continue to your Cadence organization."
+                : "Companies use Cadence to run secure, isolated organizations for their operations."}
             </p>
           </div>
 

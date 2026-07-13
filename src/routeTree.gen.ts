@@ -14,7 +14,16 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/_app'
+import { Route as AuthenticatedAppSettingsRouteImport } from './routes/_authenticated/_app.settings'
+import { Route as AuthenticatedAppScheduleRouteImport } from './routes/_authenticated/_app.schedule'
+import { Route as AuthenticatedAppIntegrationsRouteImport } from './routes/_authenticated/_app.integrations'
+import { Route as AuthenticatedAppEmployeesRouteImport } from './routes/_authenticated/_app.employees'
+import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authenticated/_app.dashboard'
+import { Route as AuthenticatedAppCustomersRouteImport } from './routes/_authenticated/_app.customers'
+import { Route as AuthenticatedAppAutomationsRouteImport } from './routes/_authenticated/_app.automations'
+import { Route as AuthenticatedAppAnalyticsRouteImport } from './routes/_authenticated/_app.analytics'
+import { Route as AuthenticatedAppAiRouteImport } from './routes/_authenticated/_app.ai'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -40,10 +49,62 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAppSettingsRoute =
+  AuthenticatedAppSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppScheduleRoute =
+  AuthenticatedAppScheduleRouteImport.update({
+    id: '/schedule',
+    path: '/schedule',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppIntegrationsRoute =
+  AuthenticatedAppIntegrationsRouteImport.update({
+    id: '/integrations',
+    path: '/integrations',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppEmployeesRoute =
+  AuthenticatedAppEmployeesRouteImport.update({
+    id: '/employees',
+    path: '/employees',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppDashboardRoute =
+  AuthenticatedAppDashboardRouteImport.update({
+    id: '/dashboard',
+    path: '/dashboard',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppCustomersRoute =
+  AuthenticatedAppCustomersRouteImport.update({
+    id: '/customers',
+    path: '/customers',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppAutomationsRoute =
+  AuthenticatedAppAutomationsRouteImport.update({
+    id: '/automations',
+    path: '/automations',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppAnalyticsRoute =
+  AuthenticatedAppAnalyticsRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppAiRoute = AuthenticatedAppAiRouteImport.update({
+  id: '/ai',
+  path: '/ai',
+  getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -51,14 +112,30 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/ai': typeof AuthenticatedAppAiRoute
+  '/analytics': typeof AuthenticatedAppAnalyticsRoute
+  '/automations': typeof AuthenticatedAppAutomationsRoute
+  '/customers': typeof AuthenticatedAppCustomersRoute
+  '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/employees': typeof AuthenticatedAppEmployeesRoute
+  '/integrations': typeof AuthenticatedAppIntegrationsRoute
+  '/schedule': typeof AuthenticatedAppScheduleRoute
+  '/settings': typeof AuthenticatedAppSettingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/ai': typeof AuthenticatedAppAiRoute
+  '/analytics': typeof AuthenticatedAppAnalyticsRoute
+  '/automations': typeof AuthenticatedAppAutomationsRoute
+  '/customers': typeof AuthenticatedAppCustomersRoute
+  '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/employees': typeof AuthenticatedAppEmployeesRoute
+  '/integrations': typeof AuthenticatedAppIntegrationsRoute
+  '/schedule': typeof AuthenticatedAppScheduleRoute
+  '/settings': typeof AuthenticatedAppSettingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -67,7 +144,16 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
+  '/_authenticated/_app/ai': typeof AuthenticatedAppAiRoute
+  '/_authenticated/_app/analytics': typeof AuthenticatedAppAnalyticsRoute
+  '/_authenticated/_app/automations': typeof AuthenticatedAppAutomationsRoute
+  '/_authenticated/_app/customers': typeof AuthenticatedAppCustomersRoute
+  '/_authenticated/_app/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/_authenticated/_app/employees': typeof AuthenticatedAppEmployeesRoute
+  '/_authenticated/_app/integrations': typeof AuthenticatedAppIntegrationsRoute
+  '/_authenticated/_app/schedule': typeof AuthenticatedAppScheduleRoute
+  '/_authenticated/_app/settings': typeof AuthenticatedAppSettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -76,9 +162,30 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forgot-password'
     | '/reset-password'
+    | '/ai'
+    | '/analytics'
+    | '/automations'
+    | '/customers'
     | '/dashboard'
+    | '/employees'
+    | '/integrations'
+    | '/schedule'
+    | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/forgot-password' | '/reset-password' | '/dashboard'
+  to:
+    | '/'
+    | '/auth'
+    | '/forgot-password'
+    | '/reset-password'
+    | '/ai'
+    | '/analytics'
+    | '/automations'
+    | '/customers'
+    | '/dashboard'
+    | '/employees'
+    | '/integrations'
+    | '/schedule'
+    | '/settings'
   id:
     | '__root__'
     | '/'
@@ -86,7 +193,16 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forgot-password'
     | '/reset-password'
-    | '/_authenticated/dashboard'
+    | '/_authenticated/_app'
+    | '/_authenticated/_app/ai'
+    | '/_authenticated/_app/analytics'
+    | '/_authenticated/_app/automations'
+    | '/_authenticated/_app/customers'
+    | '/_authenticated/_app/dashboard'
+    | '/_authenticated/_app/employees'
+    | '/_authenticated/_app/integrations'
+    | '/_authenticated/_app/schedule'
+    | '/_authenticated/_app/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -134,22 +250,112 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
+    '/_authenticated/_app': {
+      id: '/_authenticated/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedAppRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/_app/settings': {
+      id: '/_authenticated/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedAppSettingsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/schedule': {
+      id: '/_authenticated/_app/schedule'
+      path: '/schedule'
+      fullPath: '/schedule'
+      preLoaderRoute: typeof AuthenticatedAppScheduleRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/integrations': {
+      id: '/_authenticated/_app/integrations'
+      path: '/integrations'
+      fullPath: '/integrations'
+      preLoaderRoute: typeof AuthenticatedAppIntegrationsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/employees': {
+      id: '/_authenticated/_app/employees'
+      path: '/employees'
+      fullPath: '/employees'
+      preLoaderRoute: typeof AuthenticatedAppEmployeesRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/dashboard': {
+      id: '/_authenticated/_app/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      preLoaderRoute: typeof AuthenticatedAppDashboardRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/customers': {
+      id: '/_authenticated/_app/customers'
+      path: '/customers'
+      fullPath: '/customers'
+      preLoaderRoute: typeof AuthenticatedAppCustomersRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/automations': {
+      id: '/_authenticated/_app/automations'
+      path: '/automations'
+      fullPath: '/automations'
+      preLoaderRoute: typeof AuthenticatedAppAutomationsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/analytics': {
+      id: '/_authenticated/_app/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AuthenticatedAppAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/_app/ai': {
+      id: '/_authenticated/_app/ai'
+      path: '/ai'
+      fullPath: '/ai'
+      preLoaderRoute: typeof AuthenticatedAppAiRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
     }
   }
 }
 
+interface AuthenticatedAppRouteChildren {
+  AuthenticatedAppAiRoute: typeof AuthenticatedAppAiRoute
+  AuthenticatedAppAnalyticsRoute: typeof AuthenticatedAppAnalyticsRoute
+  AuthenticatedAppAutomationsRoute: typeof AuthenticatedAppAutomationsRoute
+  AuthenticatedAppCustomersRoute: typeof AuthenticatedAppCustomersRoute
+  AuthenticatedAppDashboardRoute: typeof AuthenticatedAppDashboardRoute
+  AuthenticatedAppEmployeesRoute: typeof AuthenticatedAppEmployeesRoute
+  AuthenticatedAppIntegrationsRoute: typeof AuthenticatedAppIntegrationsRoute
+  AuthenticatedAppScheduleRoute: typeof AuthenticatedAppScheduleRoute
+  AuthenticatedAppSettingsRoute: typeof AuthenticatedAppSettingsRoute
+}
+
+const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
+  AuthenticatedAppAiRoute: AuthenticatedAppAiRoute,
+  AuthenticatedAppAnalyticsRoute: AuthenticatedAppAnalyticsRoute,
+  AuthenticatedAppAutomationsRoute: AuthenticatedAppAutomationsRoute,
+  AuthenticatedAppCustomersRoute: AuthenticatedAppCustomersRoute,
+  AuthenticatedAppDashboardRoute: AuthenticatedAppDashboardRoute,
+  AuthenticatedAppEmployeesRoute: AuthenticatedAppEmployeesRoute,
+  AuthenticatedAppIntegrationsRoute: AuthenticatedAppIntegrationsRoute,
+  AuthenticatedAppScheduleRoute: AuthenticatedAppScheduleRoute,
+  AuthenticatedAppSettingsRoute: AuthenticatedAppSettingsRoute,
+}
+
+const AuthenticatedAppRouteWithChildren =
+  AuthenticatedAppRoute._addFileChildren(AuthenticatedAppRouteChildren)
+
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedAppRoute: typeof AuthenticatedAppRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedAppRoute: AuthenticatedAppRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =
