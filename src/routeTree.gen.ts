@@ -19,6 +19,7 @@ import { Route as AuthenticatedAppScheduleRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAppEmployeesRouteImport } from './routes/_authenticated/_app.employees'
 import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authenticated/_app.dashboard'
 import { Route as AuthenticatedAppCustomersRouteImport } from './routes/_authenticated/_app.customers'
+import { Route as AuthenticatedAppAnalyticsRouteImport } from './routes/_authenticated/_app.analytics'
 import { Route as AuthenticatedAppAiRouteImport } from './routes/_authenticated/_app.ai'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -73,6 +74,12 @@ const AuthenticatedAppCustomersRoute =
     path: '/customers',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppAnalyticsRoute =
+  AuthenticatedAppAnalyticsRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppAiRoute = AuthenticatedAppAiRouteImport.update({
   id: '/ai',
   path: '/ai',
@@ -85,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/ai': typeof AuthenticatedAppAiRoute
+  '/analytics': typeof AuthenticatedAppAnalyticsRoute
   '/customers': typeof AuthenticatedAppCustomersRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
   '/employees': typeof AuthenticatedAppEmployeesRoute
@@ -96,6 +104,7 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/ai': typeof AuthenticatedAppAiRoute
+  '/analytics': typeof AuthenticatedAppAnalyticsRoute
   '/customers': typeof AuthenticatedAppCustomersRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
   '/employees': typeof AuthenticatedAppEmployeesRoute
@@ -110,6 +119,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/_app/ai': typeof AuthenticatedAppAiRoute
+  '/_authenticated/_app/analytics': typeof AuthenticatedAppAnalyticsRoute
   '/_authenticated/_app/customers': typeof AuthenticatedAppCustomersRoute
   '/_authenticated/_app/dashboard': typeof AuthenticatedAppDashboardRoute
   '/_authenticated/_app/employees': typeof AuthenticatedAppEmployeesRoute
@@ -123,6 +133,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/reset-password'
     | '/ai'
+    | '/analytics'
     | '/customers'
     | '/dashboard'
     | '/employees'
@@ -134,6 +145,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/reset-password'
     | '/ai'
+    | '/analytics'
     | '/customers'
     | '/dashboard'
     | '/employees'
@@ -147,6 +159,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/_app'
     | '/_authenticated/_app/ai'
+    | '/_authenticated/_app/analytics'
     | '/_authenticated/_app/customers'
     | '/_authenticated/_app/dashboard'
     | '/_authenticated/_app/employees'
@@ -233,6 +246,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppCustomersRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/_app/analytics': {
+      id: '/_authenticated/_app/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AuthenticatedAppAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/_app/ai': {
       id: '/_authenticated/_app/ai'
       path: '/ai'
@@ -245,6 +265,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAiRoute: typeof AuthenticatedAppAiRoute
+  AuthenticatedAppAnalyticsRoute: typeof AuthenticatedAppAnalyticsRoute
   AuthenticatedAppCustomersRoute: typeof AuthenticatedAppCustomersRoute
   AuthenticatedAppDashboardRoute: typeof AuthenticatedAppDashboardRoute
   AuthenticatedAppEmployeesRoute: typeof AuthenticatedAppEmployeesRoute
@@ -253,6 +274,7 @@ interface AuthenticatedAppRouteChildren {
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAiRoute: AuthenticatedAppAiRoute,
+  AuthenticatedAppAnalyticsRoute: AuthenticatedAppAnalyticsRoute,
   AuthenticatedAppCustomersRoute: AuthenticatedAppCustomersRoute,
   AuthenticatedAppDashboardRoute: AuthenticatedAppDashboardRoute,
   AuthenticatedAppEmployeesRoute: AuthenticatedAppEmployeesRoute,
