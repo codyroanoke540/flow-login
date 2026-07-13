@@ -65,6 +65,11 @@ function Dashboard() {
                 Review AI Recommendations <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
+            <Link to="/operations">
+              <Button variant="outline" className="h-11 px-5">
+                Open Operations Center
+              </Button>
+            </Link>
             <Link to="/schedule">
               <Button variant="outline" className="h-11 px-5">
                 <CalendarDays className="mr-2 h-4 w-4" /> Open Schedule
