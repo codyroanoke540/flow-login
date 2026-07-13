@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/_app'
+import { Route as AuthenticatedAppScheduleRouteImport } from './routes/_authenticated/_app.schedule'
 import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authenticated/_app.dashboard'
 import { Route as AuthenticatedAppAiRouteImport } from './routes/_authenticated/_app.ai'
 
@@ -46,6 +47,12 @@ const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   id: '/_app',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppScheduleRoute =
+  AuthenticatedAppScheduleRouteImport.update({
+    id: '/schedule',
+    path: '/schedule',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppDashboardRoute =
   AuthenticatedAppDashboardRouteImport.update({
     id: '/dashboard',
@@ -65,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/ai': typeof AuthenticatedAppAiRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/schedule': typeof AuthenticatedAppScheduleRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -73,6 +81,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/ai': typeof AuthenticatedAppAiRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/schedule': typeof AuthenticatedAppScheduleRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -84,6 +93,7 @@ export interface FileRoutesById {
   '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/_app/ai': typeof AuthenticatedAppAiRoute
   '/_authenticated/_app/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/_authenticated/_app/schedule': typeof AuthenticatedAppScheduleRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ai'
     | '/dashboard'
+    | '/schedule'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -102,6 +113,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/ai'
     | '/dashboard'
+    | '/schedule'
   id:
     | '__root__'
     | '/'
@@ -112,6 +124,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_app'
     | '/_authenticated/_app/ai'
     | '/_authenticated/_app/dashboard'
+    | '/_authenticated/_app/schedule'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -166,6 +179,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/_app/schedule': {
+      id: '/_authenticated/_app/schedule'
+      path: '/schedule'
+      fullPath: '/schedule'
+      preLoaderRoute: typeof AuthenticatedAppScheduleRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/_app/dashboard': {
       id: '/_authenticated/_app/dashboard'
       path: '/dashboard'
@@ -186,11 +206,13 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAiRoute: typeof AuthenticatedAppAiRoute
   AuthenticatedAppDashboardRoute: typeof AuthenticatedAppDashboardRoute
+  AuthenticatedAppScheduleRoute: typeof AuthenticatedAppScheduleRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAiRoute: AuthenticatedAppAiRoute,
   AuthenticatedAppDashboardRoute: AuthenticatedAppDashboardRoute,
+  AuthenticatedAppScheduleRoute: AuthenticatedAppScheduleRoute,
 }
 
 const AuthenticatedAppRouteWithChildren =
