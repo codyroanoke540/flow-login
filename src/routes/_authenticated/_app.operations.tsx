@@ -315,3 +315,35 @@ function MiniWidget({
     </Card>
   );
 }
+
+function TodayCard({ signal }: { signal: TodaySignal }) {
+  const toneClass =
+    signal.tone === "critical"
+      ? "border-rose-500/30 bg-rose-500/5"
+      : signal.tone === "warn"
+        ? "border-amber-500/30 bg-amber-500/5"
+        : signal.tone === "success"
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : "border-border/60";
+  const dotClass =
+    signal.tone === "critical"
+      ? "bg-rose-500"
+      : signal.tone === "warn"
+        ? "bg-amber-500"
+        : signal.tone === "success"
+          ? "bg-emerald-500"
+          : "bg-primary";
+  return (
+    <Card className={"transition hover:shadow-[var(--shadow-elegant)] " + toneClass}>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2">
+          <span className={"h-1.5 w-1.5 rounded-full " + dotClass} />
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{signal.label}</p>
+        </div>
+        <p className="mt-1 font-display text-2xl font-semibold tabular-nums">{signal.count}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{signal.hint}</p>
+        <p className="mt-3 text-xs text-primary">Ask AI: "{signal.ask}"</p>
+      </CardContent>
+    </Card>
+  );
+}
