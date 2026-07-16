@@ -24,6 +24,8 @@ import {
   travelSeries,
   completionSeries,
   laborCostSeries,
+  todaySignals,
+  type TodaySignal,
   type Recommendation,
 } from "@/lib/mock-data";
 
@@ -72,6 +74,19 @@ function OperationsCenter() {
           </span>
         </div>
       </header>
+
+      {/* Today at a glance */}
+      <section>
+        <div className="mb-3 flex items-end justify-between">
+          <div>
+            <h2 className="font-display text-lg font-semibold tracking-tight">Today at a glance</h2>
+            <p className="text-sm text-muted-foreground">Signals your AI Employee is tracking right now. Click any tile to ask the AI to handle it.</p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {todaySignals.map((s) => <TodayCard key={s.id} signal={s} />)}
+        </div>
+      </section>
 
       {/* Operational Health */}
       <section>
