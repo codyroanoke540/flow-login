@@ -5,7 +5,6 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -162,7 +161,7 @@ export function AiEmployeePanel({
           </div>
         </SheetHeader>
 
-        <ScrollArea className="flex-1" viewportRef={scrollRef}>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <div className="space-y-4 px-5 py-5">
             {messages.length === 0 ? (
               <div className="space-y-4">
@@ -216,7 +215,7 @@ export function AiEmployeePanel({
               ))
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         <div className="border-t bg-background p-4">
           <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
