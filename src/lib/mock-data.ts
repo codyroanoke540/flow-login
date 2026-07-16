@@ -291,3 +291,25 @@ export const aiSavingsSeries = [
   { week: "W5", savings: 3220 },
   { week: "W6", savings: 3410 },
 ];
+
+export type TodaySignal = {
+  id: string;
+  label: string;
+  count: number;
+  tone: "info" | "warn" | "critical" | "success";
+  hint: string;
+  ask: string;
+};
+
+export const todaySignals: TodaySignal[] = [
+  { id: "conflicts", label: "Scheduling conflicts", count: 4, tone: "warn", hint: "Overlaps and infeasible travel windows", ask: "Show me the conflicts and propose fixes." },
+  { id: "late", label: "Employees running late", count: 2, tone: "warn", hint: "ETA slipping vs planned start", ask: "Which visits are at risk and who can cover?" },
+  { id: "reassign", label: "Clients needing reassignment", count: 3, tone: "critical", hint: "Assigned employee unavailable", ask: "Reassign these clients and draft the notifications." },
+  { id: "docs", label: "Documentation missing", count: 7, tone: "warn", hint: "Session notes overdue > 24h", ask: "Summarize missing docs and message the owners." },
+  { id: "payroll", label: "Payroll warnings", count: 2, tone: "warn", hint: "Overtime + missing punches", ask: "Explain the payroll warnings and how to resolve them." },
+  { id: "cancel", label: "Upcoming cancellations", count: 5, tone: "info", hint: "Predicted cancels in next 24h", ask: "Show cancellations at highest risk and mitigation options." },
+  { id: "weather", label: "Weather-affected visits", count: 6, tone: "info", hint: "Storm forecast in North district", ask: "Which visits should we reschedule for weather?" },
+  { id: "travel", label: "Travel optimization opps", count: 4, tone: "success", hint: "Route consolidations available", ask: "Optimize routes for tomorrow." },
+  { id: "productivity", label: "Today's productivity", count: 92, tone: "success", hint: "Schedule-health composite", ask: "Summarize today's productivity for the manager." },
+  { id: "approvals", label: "Alerts needing approval", count: 3, tone: "critical", hint: "Level 3 actions awaiting confirmation", ask: "List the pending approvals with reasoning." },
+];
