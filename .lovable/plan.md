@@ -1,86 +1,100 @@
-# Cadence — AI Operations Platform
+# AI Employee Framework — Implementation Plan
 
-Reposition Cadence from "AI scheduling" to an **AI Operations Platform** (long-term: AI Chief Operating Officer for service businesses). First customer is an ABA company, but nothing in the core product is ABA-specific — industry terminology and modules are pluggable.
+Goal: evolve Cadence into an AI Operations Platform where the **scheduling engine stays the source of truth** and AI Employees act on top of it via a provider-agnostic layer. This pass ships the foundation + a working "AI Employee" assistant on every authenticated page, wired to Lovable AI (OpenAI today, swappable tomorrow).
 
-Design language: Stripe × Linear × Notion × Vercel × Apple. Minimal, premium, generous whitespace, soft shadows, rounded corners, refined typography (Space Grotesk display / Inter body — already wired), a restrained gradient accent (navy → teal). No generic dashboard-template feel.
+## Scope of this pass
 
-## 1. Landing page (`/`)
-Keep structure, rewrite messaging.
-- New headline: **"The AI Operating System for Service Businesses."**
-- Sub: "Cadence runs the operations of your business — scheduling, staffing, dispatch, and optimization — so your team can focus on the work."
-- Add three quiet capability tiles under the hero (AI Operations, Intelligent Scheduling, Workforce Orchestration) — no clutter, no logos.
-- CTAs unchanged (Get started / Sign in).
+In:
+1. Provider abstraction (server) — one interface, OpenAI-compatible via Lovable AI Gateway, ready for Claude/Gemini/etc.
+2. AI Employee floating panel available on every `_authenticated/_app/*` page, with page context awareness.
+3. Streaming chat server route using AI SDK + Lovable AI (`google/gemini-3.5-flash` default; model id abstracted).
+4. Tool-calling scaffold with Level 1/2/3 permission classification (approval gate in UI for L2/L3).
+5. Explainability payload on every tool result (reasoning, impact, confidence, alternatives — mocked where no real signal exists).
+6. Lightweight in-browser memory (localStorage) for preferences + recent conversation; server-side memory hook stubbed for future DB.
+7. Operations Dashboard additions: conflicts, late employees, reassignments, missing docs, payroll warnings, cancellations, weather, travel opps, productivity, approvals — all from mock-data.
+8. Integrations registry stub (Google Cal, Outlook, Slack, Teams, Twilio, EMR, CRM, Accounting, Maps, Weather, "Viktor") — modular list, no real OAuth.
+9. Multi-role AI Employee registry (Scheduling/Ops/HR/Compliance/Payroll/Billing/Support/EA/Analytics) with per-role system prompts + tool allowlists.
 
-## 2. Auth (`/auth`)
-- Rename "Create Workspace" → **"Create Organization"**.
-- Sub-copy: "Companies use Cadence to run secure, isolated organizations for their operations."
-- No other flow changes.
+Out (explicitly deferred):
+- Real writes to a scheduling engine (no DB schema for schedules yet).
+- Real OAuth integrations.
+- Server-side persistent memory (structure in place, storage swap later).
+- Voice / drag-drop / map view.
 
-## 3. App shell for authenticated area
-New pathless layout `src/routes/_authenticated/_app.tsx` that renders:
-- **Left sidebar** (shadcn sidebar, collapsible to icon rail): Dashboard, Schedule, Employees, Customers, Analytics, AI Assistant, Automations, Integrations, Settings. Grouped so future industry modules can slot under a "Modules" section later.
-- **Top bar**: org switcher (static for now), global search input, notifications icon, user menu (sign out).
-- `<Outlet />` for content.
+## Architecture
 
-All authenticated routes move under this layout:
-- `/dashboard` (rewrite)
-- `/schedule`, `/employees`, `/customers`, `/analytics`, `/ai`, `/automations`, `/integrations`, `/settings` (new, scaffolded)
+```
+src/
+  lib/
+    ai/
+      providers/
+        types.ts              # ChatProvider interface (stream, tools, models)
+        lovable.ts            # LovableAI implementation (OpenAI-compatible gateway)
+        index.ts              # getProvider(name) — swap point
+      roles.ts                # AI Employee roles + system prompts + allowed tools
+      tools/
+        index.ts              # tool registry w/ permission level + explainability schema
+        schedule.ts           # read/suggest/modify (L1/L2/L3) — mock impl
+        comms.ts              # draft email/sms (L2)
+        reports.ts            # summarize/report (L1)
+      memory.ts               # get/set preferences + recent turns (localStorage now)
+      permissions.ts          # Level 1/2/3 helpers + approval gate types
+  routes/api/
+    ai-employee.ts            # POST streaming chat route (AI SDK + Lovable provider)
+  components/
+    ai-employee/
+      ai-employee-panel.tsx   # floating panel, open/collapse, role switcher
+      ai-employee-launcher.tsx# FAB, mounted in _app.tsx
+      message.tsx             # renders text + tool parts + approval UI
+      approval-card.tsx       # L2/L3 approve/dismiss with explainability
+```
 
-Terminology is centralized in `src/lib/terminology.ts` (e.g. `customers`, `employees`, `appointments`) so industry modules can override later.
+Mount `<AiEmployeeLauncher />` inside `_authenticated/_app.tsx` so it appears on every authenticated page. Panel reads `useRouterState` to pass current route + a small page-context object as a system message.
 
-## 4. Executive Dashboard (`/dashboard`)
-Hero **AI Briefing** card at the top:
-- "Good morning, {firstName}." (time-of-day aware)
-- "I analyzed your business overnight."
-- Bulleted summary: scheduling conflicts, unavailable employees, estimated labor savings, travel time reduced, revenue opportunities, overtime warnings, AI recommendations waiting.
-- Primary CTA **Review AI Recommendations** → `/ai`. Secondary **Open Schedule** → `/schedule`.
+## Provider abstraction
 
-**KPI grid** (7 cards, responsive 2/3/4 col):
-Employees Working Today · Open Appointments · Schedule Health Score · Travel Efficiency · Labor Cost · Customer Satisfaction · AI Confidence Score. Each: label, big value, delta vs yesterday, sparkline-style accent bar.
+```ts
+// providers/types.ts
+export interface ChatProvider {
+  name: string;
+  defaultModel: string;
+  stream(opts: { messages: UIMessage[]; tools?: ToolSet; system?: string; model?: string }): Promise<Response>;
+}
+```
 
-**Today at a glance** row: upcoming appointments list + top 3 AI recommendations preview.
+`lovable.ts` implements it using `@ai-sdk/openai-compatible` + `streamText` (per `ai-sdk-lovable-gateway` knowledge). Adding Claude/Gemini later = new file, no call-site changes.
 
-All data mocked in `src/lib/mock-data.ts` — real data wiring comes later.
+## Permissions
 
-## 5. AI Command Center (`/ai`)
-Not a chatbot. A prioritized stream of recommendations. Each card:
-- Title, category chip (Conflict / Overtime / Travel / Revenue / Staffing / Burnout / Cancellation risk)
-- Problem, Reason, **Confidence %**, **Estimated impact** ($, hours, or %)
-- Recommended action summary
-- Buttons: **Approve**, **Dismiss**, **Explain** (opens a side drawer with reasoning)
-Filter bar (category, confidence, impact). Empty-state feels calm, not empty.
+Every tool declares `level: 1 | 2 | 3`. L1 executes immediately. L2/L3 return a proposed-action payload; UI renders an approval card; on approve, the client re-invokes the tool with `approved: true`.
 
-## 6. Schedule (`/schedule`)
-View switcher: **Day · Week · Month · List · Map · Timeline**. Ship Week as the polished default with a real week grid; Day/List rendered; Month/Map/Timeline shown as tasteful placeholders labeled "Coming soon" so they don't feel broken. Appointment blocks include an AI-suggestion glyph when relevant. Drag-and-drop is out of scope for this pass (documented as follow-up) — the surface is designed to receive it.
+## Explainability
 
-## 7. Employees (`/employees`)
-Grid + list toggle. Each employee card: avatar, name, role, status pill (Available / Working / Off), skills chips, certifications, location, current workload bar, next appointment. Search + filters (role, skill, availability, location). "Add Employee" button opens a sheet (form only, no persistence this pass).
+Tool results conform to:
+```ts
+type Explainable<T> = { data: T; explain: { reasoning: string; expectedOutcome: string; impact: string; timeSaved?: string; costSaved?: string; confidence: number; alternatives?: string[] } };
+```
 
-## 8. Customers (`/customers`)
-Industry-neutral. Table with name, primary contact, location, tags, last appointment, lifetime value, status. Search + filters. Detail drawer on row click.
+## Ops Dashboard
 
-## 9. Analytics (`/analytics`)
-Executive report cards using `recharts`: Labor Utilization, Travel Efficiency, Revenue, Appointment Completion, AI Savings, Operational Efficiency. Date-range selector in header. Mock data.
+Extend `mock-data.ts` with: `conflicts`, `lateEmployees`, `reassignments`, `missingDocs`, `payrollWarnings`, `cancellations`, `weatherAlerts`, `travelOpps`, `productivity`, `pendingApprovals`. Add a "Today" section to `_app.operations.tsx` surfacing these as compact cards linked to the AI Employee ("Ask AI to resolve").
 
-## 10. Automations (`/automations`)
-List of automation rules as cards with a WHEN / THEN structure and on/off toggle. Seed three:
-- "If an employee calls out → recommend replacements."
-- "If an appointment is cancelled → notify scheduler."
-- "If overtime exceeds threshold → alert manager."
-"New Automation" button opens a sheet with trigger/action pickers (UI only).
+## UX
 
-## 11. Integrations & Settings
-Both scaffolded with real layout but light content — integration tiles (Google Calendar, Slack, QuickBooks, Twilio, Zapier — all "Connect" placeholders); Settings with tabs (Organization, Members, Billing, Security, Terminology).
+- FAB bottom-right, `⌘K`-like affordance, glass panel 420px, slides from right on desktop, sheet on mobile.
+- Composer uses AI Elements (`prompt-input`, `conversation`, `message`, `tool`, `shimmer`).
+- Role switcher in panel header (default: Operations Manager).
+- Suggested prompts seeded from page context.
 
-## Technical notes
-- Routing: add `src/routes/_authenticated/_app.tsx` (renders sidebar shell + `<Outlet />`), then convert `_authenticated/dashboard.tsx` and add the new pages as `_authenticated/_app.*.tsx`. Keeps the auth gate intact.
-- Use existing shadcn primitives; add `sidebar`, `sheet`, `tabs`, `avatar`, `badge`, `progress`, `chart` as needed via existing components.
-- No database changes. All new screens read from `src/lib/mock-data.ts` so we can wire real data later without UI churn.
-- No new backend/edge functions. No changes to auth, migrations, or Supabase clients.
-- Terminology helper (`useTerminology()`) so future industry modules can rename Customers/Employees/Appointments without touching components.
+## Secrets
 
-## Out of scope (called out for follow-ups)
-- Real drag-and-drop scheduling, map view, timeline gantt.
-- Persisting employees/customers/automations to the database.
-- Multi-org switching logic and RBAC.
-- Real AI generation of recommendations (surface is stubbed with realistic mocks).
+`LOVABLE_API_KEY` already provisioned. Server-only.
+
+## Verification
+
+- `tsgo` typecheck.
+- Manual: open any authenticated route → FAB visible → open panel → send "Who is overloaded tomorrow?" → streaming response → try an L2 action → approval card appears.
+
+## Explicitly not doing (say no now)
+
+- Real scheduling writes, real OAuth to Google/Slack/etc., persistent server memory, real weather API. All mocked with clean seams to swap in later.
