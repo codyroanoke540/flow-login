@@ -14,6 +14,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiAiEmployeeRouteImport } from './routes/api/ai-employee'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/_app'
 import { Route as AuthenticatedAppSettingsRouteImport } from './routes/_authenticated/_app.settings'
 import { Route as AuthenticatedAppScheduleRouteImport } from './routes/_authenticated/_app.schedule'
@@ -48,6 +49,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAiEmployeeRoute = ApiAiEmployeeRouteImport.update({
+  id: '/api/ai-employee',
+  path: '/api/ai-employee',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/api/ai-employee': typeof ApiAiEmployeeRoute
   '/ai': typeof AuthenticatedAppAiRoute
   '/analytics': typeof AuthenticatedAppAnalyticsRoute
   '/automations': typeof AuthenticatedAppAutomationsRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/api/ai-employee': typeof ApiAiEmployeeRoute
   '/ai': typeof AuthenticatedAppAiRoute
   '/analytics': typeof AuthenticatedAppAnalyticsRoute
   '/automations': typeof AuthenticatedAppAutomationsRoute
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/_app': typeof AuthenticatedAppRouteWithChildren
+  '/api/ai-employee': typeof ApiAiEmployeeRoute
   '/_authenticated/_app/ai': typeof AuthenticatedAppAiRoute
   '/_authenticated/_app/analytics': typeof AuthenticatedAppAnalyticsRoute
   '/_authenticated/_app/automations': typeof AuthenticatedAppAutomationsRoute
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forgot-password'
     | '/reset-password'
+    | '/api/ai-employee'
     | '/ai'
     | '/analytics'
     | '/automations'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/forgot-password'
     | '/reset-password'
+    | '/api/ai-employee'
     | '/ai'
     | '/analytics'
     | '/automations'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/reset-password'
     | '/_authenticated/_app'
+    | '/api/ai-employee'
     | '/_authenticated/_app/ai'
     | '/_authenticated/_app/analytics'
     | '/_authenticated/_app/automations'
@@ -224,6 +236,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiAiEmployeeRoute: typeof ApiAiEmployeeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -261,6 +274,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ai-employee': {
+      id: '/api/ai-employee'
+      path: '/api/ai-employee'
+      fullPath: '/api/ai-employee'
+      preLoaderRoute: typeof ApiAiEmployeeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/_app': {
@@ -389,17 +409,8 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiAiEmployeeRoute: ApiAiEmployeeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
