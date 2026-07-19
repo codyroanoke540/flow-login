@@ -408,20 +408,3 @@ function weakestFactor(s: ScoredCandidate): string {
 function uniqueDisqualifiers(scored: ScoredCandidate[]): string[] {
   return Array.from(new Set(scored.flatMap((s) => s.disqualifiers.map((d) => d.detail))));
 }
-
-function calcConfidence(scored: ScoredCandidate[]): { value: number; explanation: string } {
-  // Local implementation retained (was previously above; kept here to satisfy references)
-  const valid = scored.filter((s) => s.score !== null) as (ScoredCandidate & { score: number })[];
-  if (!valid.length) return { value: 0, explanation: "No eligible resources." };
-  valid.sort((a, b) => b.score - a.score);
-  const top = valid[0].score;
-  const runner = valid[1]?.score ?? 0;
-  const gap = top - runner;
-  const base = top;
-  const spreadBoost = Math.min(20, gap);
-  const value = Math.max(0, Math.min(100, Math.round(base * 0.85 + spreadBoost)));
-  const explanation = valid.length === 1
-    ? `Only one eligible resource passed all hard constraints.`
-    : `Top candidate scored ${top}, next best ${runner} (gap ${gap}). Confidence based on top score and margin.`;
-  return { value, explanation };
-}
