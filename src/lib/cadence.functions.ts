@@ -127,7 +127,7 @@ export const updateOrgSettings = createServerFn({ method: "POST" })
     if (data.feature_flags !== undefined) patch.feature_flags = data.feature_flags;
     if (data.onboarding_completed) patch.onboarding_completed_at = new Date().toISOString();
     const { data: saved, error } = await context.supabase
-      .from("organization_settings").upsert(patch).select("*").single();
+      .from("organization_settings").upsert(patch as never).select("*").single();
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, { action: "org_settings.updated", entity_type: "organization_settings", entity_id: orgId, new_state: saved });
     return saved;
@@ -177,7 +177,7 @@ export const upsertResource = createServerFn({ method: "POST" })
     };
     if (data.id) row.id = data.id;
     const { data: saved, error } = await context.supabase
-      .from("resources").upsert(row).select("*").single();
+      .from("resources").upsert(row as never).select("*").single();
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, {
       action: data.id ? "resource.updated" : "resource.created",
@@ -195,7 +195,7 @@ export const setResourceStatus = createServerFn({ method: "POST" })
     const patch: Record<string, unknown> = { status: data.status };
     patch.deactivated_at = data.status === "inactive" ? new Date().toISOString() : null;
     const { data: saved, error } = await context.supabase
-      .from("resources").update(patch).eq("id", data.id).eq("org_id", orgId).select("*").single();
+      .from("resources").update(patch as never).eq("id", data.id).eq("org_id", orgId).select("*").single();
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, { action: "resource.status_changed", entity_type: "resource", entity_id: data.id, new_state: { status: data.status } });
     return saved;
