@@ -3,9 +3,13 @@ import {
   type Availability,
   type Account,
   type DecisionConstraint,
+  type DisqualificationReason,
   type RecommendationDTO,
   type Resource,
+  type ResourceQualification,
   type ResourceLoad,
+  type AssignedWindow,
+  type TimeOff,
   type ScoreFactor,
   type ScoreWeights,
   type ScoredCandidate,
@@ -27,48 +31,166 @@ export function resolveWeights(
   };
 }
 
-// ---- Hard constraint checks -----------------------------------------------
+// ---- Hard constraint checks (deterministic) --------------------------------
 
-function hasSkills(resource: Resource, required: string[]): boolean {
-  if (!required.length) return true;
-  const set = new Set(resource.skills.map((s) => s.toLowerCase()));
-  return required.every((s) => set.has(s.toLowerCase()));
+function windowOf(workItem: WorkItem): { start: Date; end: Date } | null {
+  if (!workItem.scheduled_start) return null;
+  const start = new Date(workItem.scheduled_start);
+  const end = workItem.scheduled_end
+    ? new Date(workItem.scheduled_end)
+    : new Date(start.getTime() + (workItem.duration_minutes || 60) * 60_000);
+  return { start, end };
 }
 
-function isAvailable(
+function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+function checkAvailabilityFit(
   resource: Resource,
   workItem: WorkItem,
   availability: Availability[],
-): boolean {
-  if (!workItem.scheduled_start) return true;
-  const start = new Date(workItem.scheduled_start);
-  const weekday = start.getDay();
-  const mins = start.getHours() * 60 + start.getMinutes();
-  const slots = availability.filter((a) => a.resource_id === resource.id && a.weekday === weekday);
-  if (!slots.length) return true; // no availability recorded = assume available
-  return slots.some((slot) => {
+): DisqualificationReason | null {
+  const w = windowOf(workItem);
+  if (!w) return null; // no scheduled window means we can't rule out by availability
+  const slots = availability.filter((a) => a.resource_id === resource.id && a.weekday === w.start.getDay());
+  if (!slots.length) return null; // no availability recorded = do not disqualify
+  const startMins = w.start.getHours() * 60 + w.start.getMinutes();
+  const endMins = w.end.getHours() * 60 + w.end.getMinutes();
+  const covers = slots.some((slot) => {
     const [sh, sm] = slot.start_time.split(":").map(Number);
     const [eh, em] = slot.end_time.split(":").map(Number);
-    const s = sh * 60 + sm;
-    const e = eh * 60 + em;
-    return mins >= s && mins + workItem.duration_minutes <= e;
+    return startMins >= sh * 60 + sm && endMins <= eh * 60 + em;
   });
+  return covers
+    ? null
+    : { code: "unavailable", detail: "Weekly availability does not cover the requested time window" };
 }
 
-function checkHardConstraints(
+function checkTimeOff(resource: Resource, workItem: WorkItem, timeOff: TimeOff[]): DisqualificationReason | null {
+  const w = windowOf(workItem);
+  if (!w) return null;
+  const conflict = timeOff.find(
+    (t) =>
+      t.resource_id === resource.id &&
+      t.status === "approved" &&
+      overlaps(w.start, w.end, new Date(t.starts_at), new Date(t.ends_at)),
+  );
+  return conflict ? { code: "time_off", detail: "On approved time off during this window" } : null;
+}
+
+function checkOverlap(
+  resource: Resource,
+  workItem: WorkItem,
+  assignments: AssignedWindow[],
+): DisqualificationReason | null {
+  const w = windowOf(workItem);
+  if (!w) return null;
+  const conflict = assignments.find(
+    (a) =>
+      a.resource_id === resource.id &&
+      a.work_item_id !== workItem.id &&
+      overlaps(w.start, w.end, new Date(a.scheduled_start), new Date(a.scheduled_end)),
+  );
+  return conflict
+    ? { code: "overlap", detail: "Already assigned to another work item that overlaps this window" }
+    : null;
+}
+
+function checkSkills(resource: Resource, workItem: WorkItem): DisqualificationReason | null {
+  if (!workItem.required_skills?.length) return null;
+  const set = new Set(resource.skills.map((s) => s.toLowerCase()));
+  const missing = workItem.required_skills.filter((s) => !set.has(s.toLowerCase()));
+  return missing.length
+    ? { code: "missing_skill", detail: `Missing required skill${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}` }
+    : null;
+}
+
+function checkQualifications(
+  resource: Resource,
+  workItem: WorkItem,
+  quals: ResourceQualification[],
+): DisqualificationReason | null {
+  const required = workItem.required_qualifications ?? [];
+  if (!required.length) return null;
+  const w = windowOf(workItem);
+  const asOf = w?.start ?? new Date();
+  const held = quals.filter((q) => q.resource_id === resource.id);
+  const codes = new Set(held.map((q) => q.qualification_code.toLowerCase()));
+  for (const req of required) {
+    if (!codes.has(req.toLowerCase())) {
+      return { code: "missing_qualification", detail: `Missing required qualification: ${req}` };
+    }
+    const match = held.find((q) => q.qualification_code.toLowerCase() === req.toLowerCase())!;
+    if (match.expires_on && new Date(match.expires_on) < asOf) {
+      return { code: "expired_qualification", detail: `Qualification ${req} expired on ${match.expires_on}` };
+    }
+  }
+  return null;
+}
+
+function checkCapacity(
+  resource: Resource,
+  workItem: WorkItem,
+  load: ResourceLoad[],
+): DisqualificationReason | null {
+  const weeklyMinutes = Math.max(0, (resource.weekly_capacity_hours ?? resource.capacity ?? 40) * 60);
+  if (!weeklyMinutes) return null;
+  const current = load.find((l) => l.resource_id === resource.id)?.minutes_scheduled ?? 0;
+  const projected = current + (workItem.duration_minutes || 60);
+  return projected > weeklyMinutes
+    ? {
+        code: "capacity_exceeded",
+        detail: `Would exceed weekly capacity (${Math.round(projected / 60)}h > ${Math.round(weeklyMinutes / 60)}h)`,
+      }
+    : null;
+}
+
+function checkConstraints(
   resource: Resource,
   workItem: WorkItem,
   constraints: DecisionConstraint[],
-): string[] {
-  const fails: string[] = [];
+): DisqualificationReason[] {
+  const out: DisqualificationReason[] = [];
   for (const c of constraints.filter((x) => x.type === "hard" && x.active)) {
     const rule = c.rule_definition as { forbid_resource_ids?: string[]; require_status?: string };
-    if (rule.forbid_resource_ids?.includes(resource.id)) fails.push(`Blocked by constraint "${c.name}"`);
-    if (rule.require_status && resource.status !== rule.require_status) fails.push(`Constraint "${c.name}" requires status ${rule.require_status}`);
+    if (rule.forbid_resource_ids?.includes(resource.id)) {
+      out.push({ code: "constraint", detail: `Blocked by constraint "${c.name}"` });
+    }
+    if (rule.require_status && resource.status !== rule.require_status) {
+      out.push({ code: "constraint", detail: `Constraint "${c.name}" requires status ${rule.require_status}` });
+    }
   }
-  if (resource.status !== "active") fails.push("Resource is not active");
   void workItem;
-  return fails;
+  return out;
+}
+
+function evaluateDisqualifiers(input: {
+  resource: Resource;
+  workItem: WorkItem;
+  availability: Availability[];
+  quals: ResourceQualification[];
+  timeOff: TimeOff[];
+  assignments: AssignedWindow[];
+  constraints: DecisionConstraint[];
+  load: ResourceLoad[];
+}): DisqualificationReason[] {
+  const reasons: DisqualificationReason[] = [];
+  if (input.resource.status !== "active") reasons.push({ code: "inactive", detail: "Resource is not active" });
+  const s = checkSkills(input.resource, input.workItem);
+  if (s) reasons.push(s);
+  const q = checkQualifications(input.resource, input.workItem, input.quals);
+  if (q) reasons.push(q);
+  const t = checkTimeOff(input.resource, input.workItem, input.timeOff);
+  if (t) reasons.push(t);
+  const o = checkOverlap(input.resource, input.workItem, input.assignments);
+  if (o) reasons.push(o);
+  const a = checkAvailabilityFit(input.resource, input.workItem, input.availability);
+  if (a) reasons.push(a);
+  const cap = checkCapacity(input.resource, input.workItem, input.load);
+  if (cap) reasons.push(cap);
+  reasons.push(...checkConstraints(input.resource, input.workItem, input.constraints));
+  return reasons;
 }
 
 // ---- Score factors (each returns 0..1) ------------------------------------
@@ -81,7 +203,11 @@ function skillMatchScore(resource: Resource, workItem: WorkItem): number {
 }
 
 function availabilityScore(resource: Resource, workItem: WorkItem, availability: Availability[]): number {
-  return isAvailable(resource, workItem, availability) ? 1 : 0.3;
+  const w = windowOf(workItem);
+  if (!w) return 0.9;
+  const slots = availability.filter((a) => a.resource_id === resource.id && a.weekday === w.start.getDay());
+  if (!slots.length) return 0.7; // unknown availability = neutral
+  return 1;
 }
 
 function proximityScore(resource: Resource, workItem: WorkItem): number {
@@ -95,7 +221,6 @@ function costEfficiencyScore(resource: Resource, allResources: Resource[]): numb
   const min = Math.min(...rates);
   const max = Math.max(...rates);
   if (max === min) return 1;
-  // lower cost = better
   return 1 - (resource.cost_rate - min) / (max - min);
 }
 
@@ -111,7 +236,7 @@ function historicalPerformanceScore(resource: Resource): number {
 }
 
 function workloadBalanceScore(resource: Resource, load: ResourceLoad[], workItem: WorkItem): number {
-  const capacityMins = Math.max(1, resource.capacity * 60);
+  const capacityMins = Math.max(1, (resource.weekly_capacity_hours ?? resource.capacity ?? 40) * 60);
   const current = load.find((l) => l.resource_id === resource.id)?.minutes_scheduled ?? 0;
   const projected = (current + workItem.duration_minutes) / capacityMins;
   return Math.max(0, 1 - projected);
@@ -124,16 +249,20 @@ export function scoreCandidates(input: {
   account: Account | null;
   resources: Resource[];
   availability: Availability[];
+  quals: ResourceQualification[];
+  timeOff: TimeOff[];
+  assignments: AssignedWindow[];
   constraints: DecisionConstraint[];
   load: ResourceLoad[];
   weights: ScoreWeights;
 }): ScoredCandidate[] {
-  const { workItem, account, resources, availability, constraints, load, weights } = input;
+  const { workItem, account, resources, availability, quals, timeOff, assignments, constraints, load, weights } = input;
   const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
 
   return resources.map((resource) => {
-    const disqualifiers = checkHardConstraints(resource, workItem, constraints);
-    if (!hasSkills(resource, workItem.required_skills)) disqualifiers.push("Missing required skills");
+    const disqualifiers = evaluateDisqualifiers({
+      resource, workItem, availability, quals, timeOff, assignments, constraints, load,
+    });
 
     const factors: Record<ScoreFactor, number> = {
       skill_match: skillMatchScore(resource, workItem),
@@ -183,6 +312,9 @@ export function runPipeline(input: {
   account: Account | null;
   resources: Resource[];
   availability: Availability[];
+  quals: ResourceQualification[];
+  timeOff: TimeOff[];
+  assignments: AssignedWindow[];
   constraints: DecisionConstraint[];
   load: ResourceLoad[];
   approvalLevel?: 0 | 1 | 2;
@@ -192,6 +324,10 @@ export function runPipeline(input: {
   const valid = scored
     .filter((s) => s.score !== null)
     .sort((a, b) => (b.score! - a.score!)) as (ScoredCandidate & { score: number })[];
+
+  valid.forEach((c, i) => { c.rank = i + 1; c.explanation = `Rank ${i + 1}: ${topFactorSummary(c)}.`; });
+  const disqualified = scored.filter((s) => s.score === null);
+  disqualified.forEach((c) => { c.explanation = c.disqualifiers.map((d) => d.detail).join("; "); });
 
   const winner = valid[0] ?? null;
   const confidence = calcConfidence(scored);
@@ -204,12 +340,12 @@ export function runPipeline(input: {
           ? `Note: ${winner.resource.name} will approach capacity after this assignment.`
           : `${winner.resource.name} has spare capacity for this assignment.`,
       ].join(" ")
-    : `No eligible resource. Disqualifiers: ${uniqueDisqualifiers(scored).join("; ") || "unspecified"}.`;
+    : `No eligible resource. Reasons: ${uniqueDisqualifiers(scored).join("; ") || "unspecified"}.`;
 
   const impactRisk: "low" | "medium" | "high" =
     !winner ? "high" : winner.score >= 75 ? "low" : winner.score >= 55 ? "medium" : "high";
 
-  const alternatives = valid.slice(1, 4).map((s) => ({
+  const alternatives = valid.slice(1, 6).map((s) => ({
     option: `Assign to ${s.resource.name}`,
     resource_id: s.resource.id,
     score: s.score,
@@ -222,7 +358,7 @@ export function runPipeline(input: {
   const risks: string[] = [];
   if (!winner) risks.push("No candidate meets hard constraints — the request will not be schedulable as-is.");
   if (winner && winner.factors.workload_balance < 0.4) risks.push(`${winner.resource.name} is near capacity and may trigger overtime.`);
-  if (winner && winner.factors.availability < 1) risks.push(`Availability for ${winner.resource.name} is uncertain for this time window.`);
+  if (winner && winner.factors.availability < 1) risks.push(`Availability data for ${winner.resource.name} is incomplete — confirm before assigning.`);
   if (winner && winner.factors.skill_match < 1) risks.push(`Partial skill match — ${winner.resource.name} may need support on this task.`);
 
   const dto: RecommendationDTO = {
@@ -243,7 +379,9 @@ export function runPipeline(input: {
       confidence_explanation: confidence.explanation,
     },
     impact: {
-      cost: winner ? `~$${Math.round(winner.resource.cost_rate * (input.workItem.duration_minutes / 60))} labor` : "n/a",
+      cost: winner && winner.resource.cost_rate > 0
+        ? `~$${Math.round(winner.resource.cost_rate * (input.workItem.duration_minutes / 60))} labor`
+        : "Cost rate not set",
       time: `${input.workItem.duration_minutes} min`,
       risk_level: impactRisk,
       affected_accounts: input.workItem.account_id ? [input.workItem.account_id] : [],
@@ -268,5 +406,5 @@ function weakestFactor(s: ScoredCandidate): string {
 }
 
 function uniqueDisqualifiers(scored: ScoredCandidate[]): string[] {
-  return Array.from(new Set(scored.flatMap((s) => s.disqualifiers)));
+  return Array.from(new Set(scored.flatMap((s) => s.disqualifiers.map((d) => d.detail))));
 }

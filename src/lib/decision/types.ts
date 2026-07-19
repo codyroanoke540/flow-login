@@ -16,6 +16,7 @@ export interface Resource {
   cost_rate: number;
   status: string;
   metadata: Record<string, unknown>;
+  weekly_capacity_hours?: number;
 }
 
 export interface Availability {
@@ -23,6 +24,26 @@ export interface Availability {
   weekday: number; // 0-6
   start_time: string; // HH:MM
   end_time: string; // HH:MM
+}
+
+export interface ResourceQualification {
+  resource_id: ID;
+  qualification_code: string;
+  expires_on: string | null;
+}
+
+export interface TimeOff {
+  resource_id: ID;
+  starts_at: string;
+  ends_at: string;
+  status: string;
+}
+
+export interface AssignedWindow {
+  resource_id: ID;
+  work_item_id: ID;
+  scheduled_start: string;
+  scheduled_end: string;
 }
 
 export interface Account {
@@ -42,6 +63,8 @@ export interface WorkItem {
   priority: number; // 1 (low) - 5 (critical)
   deadline: string | null;
   scheduled_start: string | null;
+  scheduled_end?: string | null;
+  required_qualifications?: string[];
   location_id: ID | null;
   status: string;
   assigned_resource_id: ID | null;
@@ -87,8 +110,26 @@ export interface ScoredCandidate {
   resource: Resource;
   score: number | null; // null = hard-constraint disqualified
   factors: Record<ScoreFactor, number>;
-  disqualifiers: string[];
+  disqualifiers: DisqualificationReason[];
   notes: string[];
+  explanation?: string;
+  rank?: number;
+}
+
+export type DisqualificationCode =
+  | "inactive"
+  | "missing_skill"
+  | "missing_qualification"
+  | "expired_qualification"
+  | "unavailable"
+  | "time_off"
+  | "overlap"
+  | "capacity_exceeded"
+  | "constraint";
+
+export interface DisqualificationReason {
+  code: DisqualificationCode;
+  detail: string;
 }
 
 export interface RecommendationDTO {
