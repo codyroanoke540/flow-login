@@ -9,7 +9,7 @@ export const Route = createFileRoute("/")({
       { title: "Cadence — The AI Operating System for Service Businesses" },
       { name: "description", content: "Cadence is an AI operations platform that runs scheduling, staffing, dispatch, and optimization for service businesses." },
       { property: "og:title", content: "Cadence — The AI Operating System for Service Businesses" },
-      { property: "og:description", content: "The AI operations platform for service businesses." },
+      { property: "og:description", content: "Cadence is an AI operations platform that runs scheduling, staffing, dispatch, and optimization for service businesses." },
     ],
   }),
   component: Index,
