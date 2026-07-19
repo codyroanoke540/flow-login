@@ -24,6 +24,7 @@ import { Route as AuthenticatedAppEmployeesRouteImport } from './routes/_authent
 import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authenticated/_app.dashboard'
 import { Route as AuthenticatedAppCustomersRouteImport } from './routes/_authenticated/_app.customers'
 import { Route as AuthenticatedAppAutomationsRouteImport } from './routes/_authenticated/_app.automations'
+import { Route as AuthenticatedAppAuditRouteImport } from './routes/_authenticated/_app.audit'
 import { Route as AuthenticatedAppAnalyticsRouteImport } from './routes/_authenticated/_app.analytics'
 import { Route as AuthenticatedAppAiRouteImport } from './routes/_authenticated/_app.ai'
 
@@ -108,6 +109,11 @@ const AuthenticatedAppAutomationsRoute =
     path: '/automations',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppAuditRoute = AuthenticatedAppAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
 const AuthenticatedAppAnalyticsRoute =
   AuthenticatedAppAnalyticsRouteImport.update({
     id: '/analytics',
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/api/ai-employee': typeof ApiAiEmployeeRoute
   '/ai': typeof AuthenticatedAppAiRoute
   '/analytics': typeof AuthenticatedAppAnalyticsRoute
+  '/audit': typeof AuthenticatedAppAuditRoute
   '/automations': typeof AuthenticatedAppAutomationsRoute
   '/customers': typeof AuthenticatedAppCustomersRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
@@ -145,6 +152,7 @@ export interface FileRoutesByTo {
   '/api/ai-employee': typeof ApiAiEmployeeRoute
   '/ai': typeof AuthenticatedAppAiRoute
   '/analytics': typeof AuthenticatedAppAnalyticsRoute
+  '/audit': typeof AuthenticatedAppAuditRoute
   '/automations': typeof AuthenticatedAppAutomationsRoute
   '/customers': typeof AuthenticatedAppCustomersRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
@@ -165,6 +173,7 @@ export interface FileRoutesById {
   '/api/ai-employee': typeof ApiAiEmployeeRoute
   '/_authenticated/_app/ai': typeof AuthenticatedAppAiRoute
   '/_authenticated/_app/analytics': typeof AuthenticatedAppAnalyticsRoute
+  '/_authenticated/_app/audit': typeof AuthenticatedAppAuditRoute
   '/_authenticated/_app/automations': typeof AuthenticatedAppAutomationsRoute
   '/_authenticated/_app/customers': typeof AuthenticatedAppCustomersRoute
   '/_authenticated/_app/dashboard': typeof AuthenticatedAppDashboardRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/api/ai-employee'
     | '/ai'
     | '/analytics'
+    | '/audit'
     | '/automations'
     | '/customers'
     | '/dashboard'
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
     | '/api/ai-employee'
     | '/ai'
     | '/analytics'
+    | '/audit'
     | '/automations'
     | '/customers'
     | '/dashboard'
@@ -220,6 +231,7 @@ export interface FileRouteTypes {
     | '/api/ai-employee'
     | '/_authenticated/_app/ai'
     | '/_authenticated/_app/analytics'
+    | '/_authenticated/_app/audit'
     | '/_authenticated/_app/automations'
     | '/_authenticated/_app/customers'
     | '/_authenticated/_app/dashboard'
@@ -346,6 +358,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppAutomationsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/_app/audit': {
+      id: '/_authenticated/_app/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuthenticatedAppAuditRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/_app/analytics': {
       id: '/_authenticated/_app/analytics'
       path: '/analytics'
@@ -366,6 +385,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAiRoute: typeof AuthenticatedAppAiRoute
   AuthenticatedAppAnalyticsRoute: typeof AuthenticatedAppAnalyticsRoute
+  AuthenticatedAppAuditRoute: typeof AuthenticatedAppAuditRoute
   AuthenticatedAppAutomationsRoute: typeof AuthenticatedAppAutomationsRoute
   AuthenticatedAppCustomersRoute: typeof AuthenticatedAppCustomersRoute
   AuthenticatedAppDashboardRoute: typeof AuthenticatedAppDashboardRoute
@@ -379,6 +399,7 @@ interface AuthenticatedAppRouteChildren {
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAiRoute: AuthenticatedAppAiRoute,
   AuthenticatedAppAnalyticsRoute: AuthenticatedAppAnalyticsRoute,
+  AuthenticatedAppAuditRoute: AuthenticatedAppAuditRoute,
   AuthenticatedAppAutomationsRoute: AuthenticatedAppAutomationsRoute,
   AuthenticatedAppCustomersRoute: AuthenticatedAppCustomersRoute,
   AuthenticatedAppDashboardRoute: AuthenticatedAppDashboardRoute,

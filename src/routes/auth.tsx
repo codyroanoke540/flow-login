@@ -43,7 +43,7 @@ function AuthPage() {
     const saved = window.localStorage.getItem(REMEMBER_KEY);
     if (saved) setEmail(saved);
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard" });
+      if (data.session) navigate({ to: "/operations" });
     });
   }, [navigate]);
 
@@ -63,29 +63,48 @@ function AuthPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: emailResult.data,
           password: passwordResult.data,
           options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
+            emailRedirectTo: `${window.location.origin}/auth`,
             data: {
               display_name: displayName.trim() || null,
               company_name: companyName.trim() || null,
             },
           },
         });
-        if (error) throw error;
-        toast.success("Account created. Check your inbox to confirm your email.");
+        if (signUpError) throw signUpError;
+        // Auto-confirm is enabled on this pilot project, so signUp returns a
+        // session directly. If not, sign in explicitly to establish one.
+        if (!signUpData.session) {
+          const { error: siError } = await supabase.auth.signInWithPassword({
+            email: emailResult.data,
+            password: passwordResult.data,
+          });
+          if (siError) {
+            toast.success("Account created. Check your inbox to confirm your email.");
+            return;
+          }
+        }
+        if (remember) window.localStorage.setItem(REMEMBER_KEY, emailResult.data);
+        toast.success("Welcome to Cadence.");
+        navigate({ to: "/operations" });
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: emailResult.data,
           password: passwordResult.data,
         });
-        if (error) throw error;
+        if (error) {
+          if (/Email not confirmed/i.test(error.message)) {
+            throw new Error("Your account isn't confirmed yet. Please check your inbox for the confirmation email.");
+          }
+          throw error;
+        }
         if (remember) window.localStorage.setItem(REMEMBER_KEY, emailResult.data);
         else window.localStorage.removeItem(REMEMBER_KEY);
         toast.success("Welcome back.");
-        navigate({ to: "/dashboard" });
+        navigate({ to: "/operations" });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong";
