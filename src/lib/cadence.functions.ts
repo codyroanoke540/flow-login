@@ -110,7 +110,7 @@ export const upsertAccount = createServerFn({ method: "POST" })
     const row = { ...data, org_id: context.userId };
     const { data: saved, error } = await context.supabase
       .from("accounts")
-      .upsert(row)
+      .upsert(row as never)
       .select("*")
       .single();
     if (error) throw new Error(error.message);
@@ -212,21 +212,21 @@ export const runRecommendation = createServerFn({ method: "POST" })
         org_id: context.userId,
         work_item_id: ctx.workItem.id,
         trigger: dto.trigger,
-        context: dto.context,
-        options: dto.alternatives,
-        selected_option: dto.recommendation,
+        context: dto.context as never,
+        options: dto.alternatives as never,
+        selected_option: dto.recommendation as never,
         reasoning: { text: dto.recommendation.reasoning },
         confidence_score: dto.recommendation.confidence,
-        impact_assessment: dto.impact,
-        risks: dto.risks,
-        alternatives: dto.alternatives,
+        impact_assessment: dto.impact as never,
+        risks: dto.risks as never,
+        alternatives: dto.alternatives as never,
         approval_level: dto.approval_level,
         status: "pending",
-      })
+      } as never)
       .select("*")
       .single();
     if (error) throw new Error(error.message);
-    return { recommendation: saved, dto };
+    return { recommendation: saved, dto: dto as unknown as Record<string, unknown> };
   });
 
 export const listRecommendations = createServerFn({ method: "GET" })
