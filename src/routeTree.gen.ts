@@ -20,6 +20,7 @@ import { Route as AuthenticatedAppSettingsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAppScheduleRouteImport } from './routes/_authenticated/_app.schedule'
 import { Route as AuthenticatedAppOperationsRouteImport } from './routes/_authenticated/_app.operations'
 import { Route as AuthenticatedAppIntegrationsRouteImport } from './routes/_authenticated/_app.integrations'
+import { Route as AuthenticatedAppEmployeesRouteImport } from './routes/_authenticated/_app.employees'
 import { Route as AuthenticatedAppDashboardRouteImport } from './routes/_authenticated/_app.dashboard'
 import { Route as AuthenticatedAppAutomationsRouteImport } from './routes/_authenticated/_app.automations'
 import { Route as AuthenticatedAppAnalyticsRouteImport } from './routes/_authenticated/_app.analytics'
@@ -82,6 +83,12 @@ const AuthenticatedAppIntegrationsRoute =
     path: '/integrations',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppEmployeesRoute =
+  AuthenticatedAppEmployeesRouteImport.update({
+    id: '/employees',
+    path: '/employees',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppDashboardRoute =
   AuthenticatedAppDashboardRouteImport.update({
     id: '/dashboard',
@@ -116,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AuthenticatedAppAnalyticsRoute
   '/automations': typeof AuthenticatedAppAutomationsRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/employees': typeof AuthenticatedAppEmployeesRoute
   '/integrations': typeof AuthenticatedAppIntegrationsRoute
   '/operations': typeof AuthenticatedAppOperationsRoute
   '/schedule': typeof AuthenticatedAppScheduleRoute
@@ -131,6 +139,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AuthenticatedAppAnalyticsRoute
   '/automations': typeof AuthenticatedAppAutomationsRoute
   '/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/employees': typeof AuthenticatedAppEmployeesRoute
   '/integrations': typeof AuthenticatedAppIntegrationsRoute
   '/operations': typeof AuthenticatedAppOperationsRoute
   '/schedule': typeof AuthenticatedAppScheduleRoute
@@ -149,6 +158,7 @@ export interface FileRoutesById {
   '/_authenticated/_app/analytics': typeof AuthenticatedAppAnalyticsRoute
   '/_authenticated/_app/automations': typeof AuthenticatedAppAutomationsRoute
   '/_authenticated/_app/dashboard': typeof AuthenticatedAppDashboardRoute
+  '/_authenticated/_app/employees': typeof AuthenticatedAppEmployeesRoute
   '/_authenticated/_app/integrations': typeof AuthenticatedAppIntegrationsRoute
   '/_authenticated/_app/operations': typeof AuthenticatedAppOperationsRoute
   '/_authenticated/_app/schedule': typeof AuthenticatedAppScheduleRoute
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/automations'
     | '/dashboard'
+    | '/employees'
     | '/integrations'
     | '/operations'
     | '/schedule'
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/automations'
     | '/dashboard'
+    | '/employees'
     | '/integrations'
     | '/operations'
     | '/schedule'
@@ -198,6 +210,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_app/analytics'
     | '/_authenticated/_app/automations'
     | '/_authenticated/_app/dashboard'
+    | '/_authenticated/_app/employees'
     | '/_authenticated/_app/integrations'
     | '/_authenticated/_app/operations'
     | '/_authenticated/_app/schedule'
@@ -292,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppIntegrationsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/_app/employees': {
+      id: '/_authenticated/_app/employees'
+      path: '/employees'
+      fullPath: '/employees'
+      preLoaderRoute: typeof AuthenticatedAppEmployeesRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/_app/dashboard': {
       id: '/_authenticated/_app/dashboard'
       path: '/dashboard'
@@ -328,6 +348,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAnalyticsRoute: typeof AuthenticatedAppAnalyticsRoute
   AuthenticatedAppAutomationsRoute: typeof AuthenticatedAppAutomationsRoute
   AuthenticatedAppDashboardRoute: typeof AuthenticatedAppDashboardRoute
+  AuthenticatedAppEmployeesRoute: typeof AuthenticatedAppEmployeesRoute
   AuthenticatedAppIntegrationsRoute: typeof AuthenticatedAppIntegrationsRoute
   AuthenticatedAppOperationsRoute: typeof AuthenticatedAppOperationsRoute
   AuthenticatedAppScheduleRoute: typeof AuthenticatedAppScheduleRoute
@@ -339,6 +360,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAnalyticsRoute: AuthenticatedAppAnalyticsRoute,
   AuthenticatedAppAutomationsRoute: AuthenticatedAppAutomationsRoute,
   AuthenticatedAppDashboardRoute: AuthenticatedAppDashboardRoute,
+  AuthenticatedAppEmployeesRoute: AuthenticatedAppEmployeesRoute,
   AuthenticatedAppIntegrationsRoute: AuthenticatedAppIntegrationsRoute,
   AuthenticatedAppOperationsRoute: AuthenticatedAppOperationsRoute,
   AuthenticatedAppScheduleRoute: AuthenticatedAppScheduleRoute,
