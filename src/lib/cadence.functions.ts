@@ -226,7 +226,7 @@ export const runRecommendation = createServerFn({ method: "POST" })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
-    return { recommendation: saved, dto: dto as unknown as Record<string, unknown> };
+    return { recommendation: saved };
   });
 
 export const listRecommendations = createServerFn({ method: "GET" })
