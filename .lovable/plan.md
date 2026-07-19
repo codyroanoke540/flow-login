@@ -1,100 +1,88 @@
-# AI Employee Framework — Implementation Plan
+## Cadence Decision Platform — Build Plan
 
-Goal: evolve Cadence into an AI Operations Platform where the **scheduling engine stays the source of truth** and AI Employees act on top of it via a provider-agnostic layer. This pass ships the foundation + a working "AI Employee" assistant on every authenticated page, wired to Lovable AI (OpenAI today, swappable tomorrow).
+Build the four-layer decision architecture on top of the existing Cadence shell (auth, sidebar, AI panel, mock data). Preserve current design; no visual redesign. Everything below reuses existing routes, tokens, and components — we only add data models, a decision engine, and wire two screens to real data.
 
-## Scope of this pass
+---
 
-In:
-1. Provider abstraction (server) — one interface, OpenAI-compatible via Lovable AI Gateway, ready for Claude/Gemini/etc.
-2. AI Employee floating panel available on every `_authenticated/_app/*` page, with page context awareness.
-3. Streaming chat server route using AI SDK + Lovable AI (`google/gemini-3.5-flash` default; model id abstracted).
-4. Tool-calling scaffold with Level 1/2/3 permission classification (approval gate in UI for L2/L3).
-5. Explainability payload on every tool result (reasoning, impact, confidence, alternatives — mocked where no real signal exists).
-6. Lightweight in-browser memory (localStorage) for preferences + recent conversation; server-side memory hook stubbed for future DB.
-7. Operations Dashboard additions: conflicts, late employees, reassignments, missing docs, payroll warnings, cancellations, weather, travel opps, productivity, approvals — all from mock-data.
-8. Integrations registry stub (Google Cal, Outlook, Slack, Teams, Twilio, EMR, CRM, Accounting, Maps, Weather, "Viktor") — modular list, no real OAuth.
-9. Multi-role AI Employee registry (Scheduling/Ops/HR/Compliance/Payroll/Billing/Support/EA/Analytics) with per-role system prompts + tool allowlists.
+### Phase 1 — Core data layer (universal objects)
 
-Out (explicitly deferred):
-- Real writes to a scheduling engine (no DB schema for schedules yet).
-- Real OAuth integrations.
-- Server-side persistent memory (structure in place, storage swap later).
-- Voice / drag-drop / map view.
+Single migration adds tables + RLS + GRANTs, scoped by `org_id` (the signed-in user is the org for MVP):
 
-## Architecture
+- `locations` (id, org_id, name, address, timezone, region, metadata)
+- `resources` (id, org_id, name, type, skills[], location_id, capacity, cost_rate, status, metadata)
+- `resource_availability` (id, resource_id, weekday, start_time, end_time)
+- `accounts` (id, org_id, name, type, tier, requirements, preferences, location_id, status)
+- `work_items` (id, org_id, title, type, account_id, required_skills[], duration_minutes, priority, deadline, location_id, status, assigned_resource_id)
+- `requirements` (id, work_item_id, type hard|soft, description, value, weight)
+- `constraints` (id, org_id, name, type hard|soft, scope, rule_definition jsonb, active)
+- `policies` (id, org_id, name, industry, scope, rules jsonb, version, active)
+- `objectives` (id, org_id, name, type maximize|minimize|balance, metric, weight, scope)
+- `recommendations` (id, org_id, trigger, context jsonb, options jsonb, selected_option jsonb, reasoning jsonb, confidence_score, impact_assessment jsonb, risks jsonb, alternatives jsonb, approval_level, status, created_at)
+- `outcomes` (id, recommendation_id, work_item_id, actual_result jsonb, expected_result jsonb, variance jsonb, recorded_at)
 
-```
-src/
-  lib/
-    ai/
-      providers/
-        types.ts              # ChatProvider interface (stream, tools, models)
-        lovable.ts            # LovableAI implementation (OpenAI-compatible gateway)
-        index.ts              # getProvider(name) — swap point
-      roles.ts                # AI Employee roles + system prompts + allowed tools
-      tools/
-        index.ts              # tool registry w/ permission level + explainability schema
-        schedule.ts           # read/suggest/modify (L1/L2/L3) — mock impl
-        comms.ts              # draft email/sms (L2)
-        reports.ts            # summarize/report (L1)
-      memory.ts               # get/set preferences + recent turns (localStorage now)
-      permissions.ts          # Level 1/2/3 helpers + approval gate types
-  routes/api/
-    ai-employee.ts            # POST streaming chat route (AI SDK + Lovable provider)
-  components/
-    ai-employee/
-      ai-employee-panel.tsx   # floating panel, open/collapse, role switcher
-      ai-employee-launcher.tsx# FAB, mounted in _app.tsx
-      message.tsx             # renders text + tool parts + approval UI
-      approval-card.tsx       # L2/L3 approve/dismiss with explainability
-```
+RLS: each table `USING (org_id = auth.uid())` for authenticated. GRANTs to authenticated + service_role in the same migration. Standard `updated_at` trigger.
 
-Mount `<AiEmployeeLauncher />` inside `_authenticated/_app.tsx` so it appears on every authenticated page. Panel reads `useRouterState` to pass current route + a small page-context object as a system message.
+Seed data stays in migration (deterministic demo rows for the signed-in user's first login is out of scope; empty states shown instead).
 
-## Provider abstraction
+---
 
-```ts
-// providers/types.ts
-export interface ChatProvider {
-  name: string;
-  defaultModel: string;
-  stream(opts: { messages: UIMessage[]; tools?: ToolSet; system?: string; model?: string }): Promise<Response>;
-}
-```
+### Phase 2 — Decision engine (server-side, pure functions)
 
-`lovable.ts` implements it using `@ai-sdk/openai-compatible` + `streamText` (per `ai-sdk-lovable-gateway` knowledge). Adding Claude/Gemini later = new file, no call-site changes.
+`src/lib/decision/` — no I/O, unit-testable:
 
-## Permissions
+- `types.ts` — TS types mirroring the DB models + `Candidate`, `ScoredCandidate`, `Recommendation` DTO matching the spec's JSON exactly.
+- `constraints.ts` — `applyHardConstraints(candidates, workItem, constraints)` filters.
+- `scoring.ts` — factor functions (skill_match, availability, proximity, cost_efficiency, priority_alignment, historical_performance, workload_balance). Weights resolved via `resolveWeights(global → industry → account → workItem)`.
+- `optimize.ts` — weighted sum, normalize 0–100, tie-break by objectives.
+- `confidence.ts` — spread between top candidates + data completeness → 0–100 + explanation string.
+- `explain.ts` — builds the reasoning/impact/alternatives payload.
+- `pipeline.ts` — orchestrates the 13 stages, returns a full `Recommendation` object matching the spec.
 
-Every tool declares `level: 1 | 2 | 3`. L1 executes immediately. L2/L3 return a proposed-action payload; UI renders an approval card; on approve, the client re-invokes the tool with `approved: true`.
+---
 
-## Explainability
+### Phase 3 — Server functions (RPC surface)
 
-Tool results conform to:
-```ts
-type Explainable<T> = { data: T; explain: { reasoning: string; expectedOutcome: string; impact: string; timeSaved?: string; costSaved?: string; confidence: number; alternatives?: string[] } };
-```
+`src/lib/*.functions.ts` under `requireSupabaseAuth`:
 
-## Ops Dashboard
+- Resources: `listResources`, `upsertResource`, `setAvailability`
+- Accounts: `listAccounts`, `upsertAccount`
+- WorkItems: `listWorkItems`, `createWorkItem`, `assignWorkItem`
+- Constraints/Policies/Objectives: `list*` + `upsert*`
+- Decisions: `runRecommendation(workItemId)` → persists a `recommendations` row + returns it; `approveRecommendation(id)` (Class 2) executes the assignment and writes an `outcomes` row; `rejectRecommendation(id)`.
 
-Extend `mock-data.ts` with: `conflicts`, `lateEmployees`, `reassignments`, `missingDocs`, `payrollWarnings`, `cancellations`, `weatherAlerts`, `travelOpps`, `productivity`, `pendingApprovals`. Add a "Today" section to `_app.operations.tsx` surfacing these as compact cards linked to the AI Employee ("Ask AI to resolve").
+Class 0/1/2 supported; Class 3/4 fields exist in the schema but are rejected at the server boundary for MVP.
 
-## UX
+---
 
-- FAB bottom-right, `⌘K`-like affordance, glass panel 420px, slides from right on desktop, sheet on mobile.
-- Composer uses AI Elements (`prompt-input`, `conversation`, `message`, `tool`, `shimmer`).
-- Role switcher in panel header (default: Operations Manager).
-- Suggested prompts seeded from page context.
+### Phase 4 — Wire existing UI to real data (no redesign)
 
-## Secrets
+Only screens already in the sidebar. Replace mock-data imports with `useSuspenseQuery` against the new server fns:
 
-`LOVABLE_API_KEY` already provisioned. Server-only.
+- `/employees` → resources (list, add, edit availability)
+- `/customers` → accounts (list, add)
+- `/schedule` → work items list + assign action
+- `/operations` → live `recommendations` feed; each card renders the spec's fields (what/why, confidence + explanation, impact, alternatives, risks). Approve/Reject calls the server fns.
+- `/dashboard` → counts + last 5 recommendations.
 
-## Verification
+Other routes (Analytics, Automations, Integrations, AI, Settings) keep current mock UI — untouched.
 
-- `tsgo` typecheck.
-- Manual: open any authenticated route → FAB visible → open panel → send "Who is overloaded tomorrow?" → streaming response → try an L2 action → approval card appears.
+---
 
-## Explicitly not doing (say no now)
+### Phase 5 — AI panel integration
 
-- Real scheduling writes, real OAuth to Google/Slack/etc., persistent server memory, real weather API. All mocked with clean seams to swap in later.
+The existing `/api/ai-employee` streaming route gains one server-side tool: `run_recommendation(workItemId)` that calls the pipeline and returns the recommendation payload. The panel already renders tool proposals — no UI change needed.
+
+---
+
+### Out of scope for this build
+
+- Class 3/4 autonomy, learning loop beyond storing outcomes, industry-module packaging UI, audit-log viewer, multi-user orgs, real geocoding (proximity uses stored lat/lng if present, else neutral score), payroll/notifications tools.
+
+### Technical notes
+
+- All new tables carry `org_id uuid not null` = `auth.uid()` on insert. RLS `USING (org_id = auth.uid())`.
+- Recommendation JSON columns are `jsonb`; the DTO shape returned to the client matches the spec verbatim so the UI is a direct render.
+- Scoring weights: default row in `objectives` per org on first write; per-account/work-item overrides via `preferences.weights` / `metadata.weights` merged in `resolveWeights`.
+- No changes to auth, routing shell, styles, or the AI provider layer.
+
+Approve to start with the Phase 1 migration.
