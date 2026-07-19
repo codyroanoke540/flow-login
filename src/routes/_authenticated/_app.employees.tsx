@@ -10,7 +10,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Progress } from "@/components/ui/progress";
 import {
   Sheet,
   SheetContent,
@@ -21,7 +20,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
-import { listResources, upsertResource } from "@/lib/cadence.functions";
+import { listResources, setResourceStatus, upsertResource } from "@/lib/cadence.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/employees")({
   head: () => ({ meta: [{ title: "Employees — Cadence" }] }),
@@ -35,6 +34,7 @@ function initialsOf(name: string) {
 function EmployeesPage() {
   const listFn = useServerFn(listResources);
   const upsertFn = useServerFn(upsertResource);
+  const statusFn = useServerFn(setResourceStatus);
   const qc = useQueryClient();
   const { data: resources = [] } = useQuery({ queryKey: ["resources"], queryFn: () => listFn() });
   const [q, setQ] = useState("");
@@ -54,7 +54,7 @@ function EmployeesPage() {
         name: input.name,
         type: input.type,
         skills: input.skills.split(",").map((s) => s.trim()).filter(Boolean),
-        capacity: Number(input.capacity) || 40,
+        weekly_capacity_hours: Number(input.capacity) || 40,
         cost_rate: Number(input.cost_rate) || 0,
       },
     }),
@@ -64,6 +64,12 @@ function EmployeesPage() {
       setForm({ name: "", type: "employee", skills: "", capacity: 40, cost_rate: 0 });
       qc.invalidateQueries({ queryKey: ["resources"] });
     },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const statusMut = useMutation({
+    mutationFn: (input: { id: string; status: "active" | "inactive" }) => statusFn({ data: input }),
+    onSuccess: () => { toast.success("Status updated"); qc.invalidateQueries({ queryKey: ["resources"] }); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
@@ -124,7 +130,8 @@ function EmployeesPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((e) => {
-            const utilization = Math.min(100, Math.round(((Number(e.cost_rate) || 0) / 100) * 100));
+            const hours = Number(e.weekly_capacity_hours ?? e.capacity ?? 0);
+            const active = e.status === "active";
             return (
               <Card key={e.id} className="border-border/60">
                 <CardContent className="p-5">
@@ -133,19 +140,23 @@ function EmployeesPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="truncate font-medium">{e.name}</p>
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">{e.status}</span>
+                        <Badge variant={active ? "default" : "outline"} className="text-[10px] uppercase tracking-wider">{e.status}</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">{e.type} · {e.capacity} hrs/wk · ${Number(e.cost_rate).toFixed(0)}/hr</p>
+                      <p className="text-xs text-muted-foreground">{e.type} · {hours} hrs/wk · ${Number(e.cost_rate).toFixed(0)}/hr</p>
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-1.5">
-                    {(e.skills ?? []).map((s) => <Badge key={s} variant="secondary" className="font-normal">{s}</Badge>)}
+                    {(e.skills ?? []).map((s: string) => <Badge key={s} variant="secondary" className="font-normal">{s}</Badge>)}
                   </div>
-                  <div className="mt-4">
-                    <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Rate signal</span><span className="tabular-nums">{utilization}%</span>
-                    </div>
-                    <Progress value={utilization} className="h-1.5" />
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={statusMut.isPending}
+                      onClick={() => statusMut.mutate({ id: e.id, status: active ? "inactive" : "active" })}
+                    >
+                      {active ? "Deactivate" : "Reactivate"}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

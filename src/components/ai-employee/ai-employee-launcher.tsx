@@ -15,8 +15,8 @@ export function AiEmployeeLauncher() {
     <>
       <Button
         onClick={() => setOpen(true)}
-        aria-label="Open AI Employee"
-        className="fixed bottom-5 right-5 z-40 h-12 gap-2 rounded-full px-5 text-white shadow-lg"
+        aria-label="Open AI assistant"
+        className="fixed bottom-4 right-4 z-40 h-12 gap-2 rounded-full px-5 text-white shadow-lg sm:bottom-5 sm:right-5"
         style={{ backgroundImage: "var(--gradient-brand)" }}
       >
         <Bot className="h-4 w-4" />

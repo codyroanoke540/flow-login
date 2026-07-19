@@ -744,3 +744,32 @@ export const listAuditEvents = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return data ?? [];
   });
+
+// ---------- Organization (name / website / timezone) ---------------------
+
+export const updateOrganization = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({
+    name: z.string().min(1).max(120).optional(),
+    website: z.string().url().nullable().optional(),
+    timezone: z.string().min(1).max(64).optional(),
+  }).parse(i))
+  .handler(async ({ data, context }) => {
+    const orgId = await resolveActiveOrg(context);
+    assertRole(await getRole(context, orgId), ["owner", "admin"]);
+    const patch: Record<string, unknown> = {};
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.website !== undefined) patch.website = data.website;
+    if (data.timezone !== undefined) patch.timezone = data.timezone;
+    if (Object.keys(patch).length === 0) return { ok: true };
+    const { data: saved, error } = await context.supabase
+      .from("organizations").update(patch as never).eq("id", orgId).select("*").single();
+    if (error) throw new Error(error.message);
+    await writeAudit(context, orgId, {
+      action: "organization.updated",
+      entity_type: "organization",
+      entity_id: orgId,
+      new_state: saved,
+    });
+    return saved;
+  });
