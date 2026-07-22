@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       accounts: {
         Row: {
+          city: string | null
           contact_email: string | null
           contact_name: string | null
           contact_phone: string | null
@@ -28,14 +29,21 @@ export type Database = {
           notes: string | null
           org_id: string
           preferences: Json
+          preferred_resource_ids: string[]
+          required_qualifications: string[]
           required_skills: string[]
           requirements: Json
+          service_address: string | null
+          state: string | null
           status: string
           tier: string
+          timezone: string | null
           type: string
           updated_at: string
+          zip: string | null
         }
         Insert: {
+          city?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
@@ -48,14 +56,21 @@ export type Database = {
           notes?: string | null
           org_id: string
           preferences?: Json
+          preferred_resource_ids?: string[]
+          required_qualifications?: string[]
           required_skills?: string[]
           requirements?: Json
+          service_address?: string | null
+          state?: string | null
           status?: string
           tier?: string
+          timezone?: string | null
           type?: string
           updated_at?: string
+          zip?: string | null
         }
         Update: {
+          city?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
@@ -68,12 +83,18 @@ export type Database = {
           notes?: string | null
           org_id?: string
           preferences?: Json
+          preferred_resource_ids?: string[]
+          required_qualifications?: string[]
           required_skills?: string[]
           requirements?: Json
+          service_address?: string | null
+          state?: string | null
           status?: string
           tier?: string
+          timezone?: string | null
           type?: string
           updated_at?: string
+          zip?: string | null
         }
         Relationships: [
           {
@@ -836,35 +857,50 @@ export type Database = {
       resource_qualifications: {
         Row: {
           created_at: string
+          credential_number: string | null
           expires_on: string | null
           id: string
           issued_on: string | null
           metadata: Json
+          notes: string | null
           org_id: string
           qualification_code: string
+          qualification_name: string | null
+          qualification_type: string | null
           resource_id: string
+          status: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          credential_number?: string | null
           expires_on?: string | null
           id?: string
           issued_on?: string | null
           metadata?: Json
+          notes?: string | null
           org_id: string
           qualification_code: string
+          qualification_name?: string | null
+          qualification_type?: string | null
           resource_id: string
+          status?: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          credential_number?: string | null
           expires_on?: string | null
           id?: string
           issued_on?: string | null
           metadata?: Json
+          notes?: string | null
           org_id?: string
           qualification_code?: string
+          qualification_name?: string | null
+          qualification_type?: string | null
           resource_id?: string
+          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -990,6 +1026,7 @@ export type Database = {
           name: string
           notes: string | null
           org_id: string
+          phone: string | null
           skills: string[]
           status: string
           type: string
@@ -1008,6 +1045,7 @@ export type Database = {
           name: string
           notes?: string | null
           org_id: string
+          phone?: string | null
           skills?: string[]
           status?: string
           type?: string
@@ -1026,6 +1064,7 @@ export type Database = {
           name?: string
           notes?: string | null
           org_id?: string
+          phone?: string | null
           skills?: string[]
           status?: string
           type?: string
@@ -1154,6 +1193,7 @@ export type Database = {
         Row: {
           account_id: string | null
           assigned_resource_id: string | null
+          canceled_reason: string | null
           created_at: string
           deadline: string | null
           duration_minutes: number
@@ -1175,6 +1215,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           assigned_resource_id?: string | null
+          canceled_reason?: string | null
           created_at?: string
           deadline?: string | null
           duration_minutes?: number
@@ -1196,6 +1237,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           assigned_resource_id?: string | null
+          canceled_reason?: string | null
           created_at?: string
           deadline?: string | null
           duration_minutes?: number
