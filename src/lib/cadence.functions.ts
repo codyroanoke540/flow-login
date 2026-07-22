@@ -151,6 +151,7 @@ export const upsertResource = createServerFn({ method: "POST" })
     id: z.string().uuid().optional(),
     name: z.string().min(1),
     email: z.string().email().nullable().optional(),
+    phone: z.string().nullable().optional(),
     type: z.string().default("employee"),
     skills: z.array(z.string()).default([]),
     location_id: z.string().uuid().nullable().optional(),
@@ -163,9 +164,9 @@ export const upsertResource = createServerFn({ method: "POST" })
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
     const row: Record<string, unknown> = {
-      org_id: orgId,
       name: data.name,
       email: data.email ?? null,
+      phone: data.phone ?? null,
       type: data.type,
       skills: data.skills,
       location_id: data.location_id ?? null,
@@ -175,13 +176,22 @@ export const upsertResource = createServerFn({ method: "POST" })
       status: data.status,
       notes: data.notes ?? null,
     };
-    if (data.id) row.id = data.id;
-    const { data: saved, error } = await context.supabase
-      .from("resources").upsert(row as never).select("*").single();
-    if (error) throw new Error(error.message);
+    let saved: Record<string, unknown> | null = null;
+    if (data.id) {
+      const { data: r, error } = await context.supabase
+        .from("resources").update(row as never).eq("id", data.id).eq("org_id", orgId).select("*").single();
+      if (error) throw new Error(error.message);
+      saved = r;
+    } else {
+      const { data: r, error } = await context.supabase
+        .from("resources").insert({ ...row, org_id: orgId } as never).select("*").single();
+      if (error) throw new Error(error.message);
+      saved = r;
+    }
+    if (!saved) throw new Error("Failed to persist resource");
     await writeAudit(context, orgId, {
       action: data.id ? "resource.updated" : "resource.created",
-      entity_type: "resource", entity_id: saved.id, new_state: saved,
+      entity_type: "resource", entity_id: saved.id as string, new_state: saved,
     });
     return saved;
   });
@@ -234,6 +244,11 @@ export const addResourceQualification = createServerFn({ method: "POST" })
   .inputValidator((i: unknown) => z.object({
     resource_id: z.string().uuid(),
     qualification_code: z.string().min(1),
+    qualification_name: z.string().nullable().optional(),
+    qualification_type: z.string().nullable().optional(),
+    credential_number: z.string().nullable().optional(),
+    status: z.string().default("active"),
+    notes: z.string().nullable().optional(),
     issued_on: z.string().nullable().optional(),
     expires_on: z.string().nullable().optional(),
   }).parse(i))
@@ -329,7 +344,14 @@ export const upsertAccount = createServerFn({ method: "POST" })
     contact_name: z.string().nullable().optional(),
     contact_email: z.string().nullable().optional(),
     contact_phone: z.string().nullable().optional(),
+    service_address: z.string().nullable().optional(),
+    city: z.string().nullable().optional(),
+    state: z.string().nullable().optional(),
+    zip: z.string().nullable().optional(),
+    timezone: z.string().nullable().optional(),
     required_skills: z.array(z.string()).default([]),
+    required_qualifications: z.array(z.string()).default([]),
+    preferred_resource_ids: z.array(z.string().uuid()).default([]),
     default_duration_minutes: z.number().int().positive().default(60),
     notes: z.string().nullable().optional(),
     preferences: z.record(z.string(), z.unknown()).default({}),
@@ -338,13 +360,39 @@ export const upsertAccount = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
-    const row = { ...data, org_id: orgId } as never;
+    const { id, ...rest } = data;
+    let saved: Record<string, unknown> | null = null;
+    if (id) {
+      const { data: r, error } = await context.supabase
+        .from("accounts").update(rest as never).eq("id", id).eq("org_id", orgId).select("*").single();
+      if (error) throw new Error(error.message);
+      saved = r;
+    } else {
+      const { data: r, error } = await context.supabase
+        .from("accounts").insert({ ...rest, org_id: orgId } as never).select("*").single();
+      if (error) throw new Error(error.message);
+      saved = r;
+    }
+    if (!saved) throw new Error("Failed to persist account");
+    await writeAudit(context, orgId, {
+      action: id ? "account.updated" : "account.created",
+      entity_type: "account", entity_id: saved.id as string, new_state: saved,
+    });
+    return saved;
+  });
+
+export const setAccountStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ id: z.string().uuid(), status: z.enum(["active", "inactive"]) }).parse(i))
+  .handler(async ({ data, context }) => {
+    const orgId = await resolveActiveOrg(context);
+    assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager"]);
     const { data: saved, error } = await context.supabase
-      .from("accounts").upsert(row).select("*").single();
+      .from("accounts").update({ status: data.status } as never)
+      .eq("id", data.id).eq("org_id", orgId).select("*").single();
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, {
-      action: data.id ? "account.updated" : "account.created",
-      entity_type: "account", entity_id: saved.id, new_state: saved,
+      action: "account.status_changed", entity_type: "account", entity_id: data.id, new_state: { status: data.status },
     });
     return saved;
   });
@@ -398,12 +446,18 @@ export const updateWorkItem = createServerFn({ method: "POST" })
   .inputValidator((i: unknown) => z.object({
     id: z.string().uuid(),
     title: z.string().optional(),
+    type: z.string().optional(),
+    account_id: z.string().uuid().nullable().optional(),
     scheduled_start: z.string().nullable().optional(),
     scheduled_end: z.string().nullable().optional(),
     duration_minutes: z.number().int().positive().optional(),
     required_skills: z.array(z.string()).optional(),
     required_qualifications: z.array(z.string()).optional(),
     priority: z.number().int().min(1).max(5).optional(),
+    status: z.enum(["unassigned", "pending_recommendation", "pending_approval", "assigned", "scheduled", "in_progress", "completed", "canceled"]).optional(),
+    assigned_resource_id: z.string().uuid().nullable().optional(),
+    location_id: z.string().uuid().nullable().optional(),
+    deadline: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
   }).parse(i))
   .handler(async ({ data, context }) => {
@@ -417,6 +471,28 @@ export const updateWorkItem = createServerFn({ method: "POST" })
     return saved;
   });
 
+export const previewCandidates = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((i: unknown) => z.object({ work_item_id: z.string().uuid() }).parse(i))
+  .handler(async ({ data, context }) => {
+    const orgId = await resolveActiveOrg(context);
+    const ctx = await loadPipelineContext(context.supabase, orgId, data.work_item_id);
+    const { scored } = runPipeline({ trigger: "preview", ...ctx, approvalLevel: 2 });
+    return scored
+      .map((c) => ({
+        resource_id: c.resource.id,
+        resource_name: c.resource.name,
+        eligible: c.score !== null,
+        score: c.score,
+        factors: c.factors,
+        disqualifiers: c.disqualifiers,
+      }))
+      .sort((a, b) => {
+        if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+        return (b.score ?? -1) - (a.score ?? -1);
+      });
+  });
+
 export const cancelWorkItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({ id: z.string().uuid(), reason: z.string().optional() }).parse(i))
@@ -424,7 +500,8 @@ export const cancelWorkItem = createServerFn({ method: "POST" })
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
     const { data: saved, error } = await context.supabase
-      .from("work_items").update({ status: "canceled" }).eq("id", data.id).eq("org_id", orgId).select("*").single();
+      .from("work_items").update({ status: "canceled", canceled_reason: data.reason ?? null } as never)
+      .eq("id", data.id).eq("org_id", orgId).select("*").single();
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, { action: "work_item.canceled", entity_type: "work_item", entity_id: data.id, reason: data.reason, new_state: saved });
     return saved;
