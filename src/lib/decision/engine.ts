@@ -53,8 +53,15 @@ function checkAvailabilityFit(
 ): DisqualificationReason | null {
   const w = windowOf(workItem);
   if (!w) return null; // no scheduled window means we can't rule out by availability
+  const anyForResource = availability.some((a) => a.resource_id === resource.id);
+  if (!anyForResource) {
+    return { code: "unavailable", detail: "Weekly availability has not been configured" };
+  }
   const slots = availability.filter((a) => a.resource_id === resource.id && a.weekday === w.start.getDay());
-  if (!slots.length) return null; // no availability recorded = do not disqualify
+  if (!slots.length) {
+    const dayName = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][w.start.getDay()];
+    return { code: "unavailable", detail: `Not available on ${dayName}` };
+  }
   const startMins = w.start.getHours() * 60 + w.start.getMinutes();
   const endMins = w.end.getHours() * 60 + w.end.getMinutes();
   const covers = slots.some((slot) => {
@@ -206,7 +213,7 @@ function availabilityScore(resource: Resource, workItem: WorkItem, availability:
   const w = windowOf(workItem);
   if (!w) return 0.9;
   const slots = availability.filter((a) => a.resource_id === resource.id && a.weekday === w.start.getDay());
-  if (!slots.length) return 0.7; // unknown availability = neutral
+  if (!slots.length) return 0;
   return 1;
 }
 
