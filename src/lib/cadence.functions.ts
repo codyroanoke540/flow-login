@@ -176,7 +176,7 @@ export const upsertResource = createServerFn({ method: "POST" })
       status: data.status,
       notes: data.notes ?? null,
     };
-    let saved: Record<string, unknown> | null = null;
+    let saved: any = null;
     if (data.id) {
       const { data: r, error } = await context.supabase
         .from("resources").update(row as never).eq("id", data.id).eq("org_id", orgId).select("*").single();
@@ -361,7 +361,7 @@ export const upsertAccount = createServerFn({ method: "POST" })
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
     const { id, ...rest } = data;
-    let saved: Record<string, unknown> | null = null;
+    let saved: any = null;
     if (id) {
       const { data: r, error } = await context.supabase
         .from("accounts").update(rest as never).eq("id", id).eq("org_id", orgId).select("*").single();
