@@ -296,7 +296,7 @@ function OperationsCenter() {
                     className="text-white"
                     style={{ backgroundImage: "var(--gradient-brand)" }}
                     onClick={() => approveMut.mutate(active.id)}
-                    disabled={approveMut.isPending}
+                    disabled={approveMut.isPending || !active.selected_option?.resource_id || !active.work_item_id}
                   >
                     <Check className="mr-1.5 h-3.5 w-3.5" /> Approve
                   </Button>
