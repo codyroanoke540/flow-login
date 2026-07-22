@@ -143,6 +143,7 @@ function OperationsCenter() {
                 {pending.map((r: any) => {
                   const wi = (items as any[]).find((i) => i.id === r.work_item_id);
                   const resource = (resources as any[]).find((res) => res.id === r.selected_option?.resource_id);
+                  const canApprove = !!r.selected_option?.resource_id && !!r.work_item_id;
                   return (
                     <Card key={r.id} className="border-border/60">
                       <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-start sm:justify-between">
@@ -170,13 +171,19 @@ function OperationsCenter() {
                             className="text-white"
                             style={{ backgroundImage: "var(--gradient-brand)" }}
                             onClick={() => approveMut.mutate(r.id)}
-                            disabled={approveMut.isPending}
+                            disabled={approveMut.isPending || !canApprove}
+                            title={canApprove ? undefined : "No eligible resource — review candidates and adjust availability or skills."}
                           >
                             <Check className="mr-1.5 h-3.5 w-3.5" /> Approve
                           </Button>
                         </div>
                       </CardHeader>
                       <CardContent className="text-sm text-muted-foreground">
+                        {!canApprove && (
+                          <p className="mb-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+                            No eligible resource. Open Details to see why each candidate was disqualified.
+                          </p>
+                        )}
                         {r.selected_option?.reasoning ?? r.reasoning?.text ?? r.trigger}
                       </CardContent>
                     </Card>
@@ -289,7 +296,7 @@ function OperationsCenter() {
                     className="text-white"
                     style={{ backgroundImage: "var(--gradient-brand)" }}
                     onClick={() => approveMut.mutate(active.id)}
-                    disabled={approveMut.isPending}
+                    disabled={approveMut.isPending || !active.selected_option?.resource_id || !active.work_item_id}
                   >
                     <Check className="mr-1.5 h-3.5 w-3.5" /> Approve
                   </Button>
