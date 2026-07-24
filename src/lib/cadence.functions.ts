@@ -923,7 +923,7 @@ export const approveRecommendation = createServerFn({ method: "POST" })
       throw new Error(`Cannot approve: ${reasons}`);
     }
 
-    const { error: executeError } = await context.supabase.rpc("execute_recommendation_approval", {
+    const { error: executeError } = await (context.supabase.rpc as any)("execute_recommendation_approval", {
       _recommendation_id: data.id,
       _expected_resource_id: selected.resource_id,
     });
@@ -938,7 +938,7 @@ export const rejectRecommendation = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler", "supervisor"]);
-    const { error } = await context.supabase.rpc("execute_recommendation_rejection", {
+    const { error } = await (context.supabase.rpc as any)("execute_recommendation_rejection", {
       _recommendation_id: data.id,
       _reason: data.reason ?? null,
     });
@@ -964,7 +964,7 @@ export const recordOutcome = createServerFn({ method: "POST" })
     if (data.actual_resource_id) {
       await assertEntityInOrg(context, "resources", data.actual_resource_id, orgId, "Resource");
     }
-    const { data: outcomeId, error: rpcError } = await context.supabase.rpc("record_work_item_outcome", {
+    const { data: outcomeId, error: rpcError } = await (context.supabase.rpc as any)("record_work_item_outcome", {
       _work_item_id: data.work_item_id,
       _final_status: data.final_status,
       _actual_resource_id: data.actual_resource_id ?? null,
