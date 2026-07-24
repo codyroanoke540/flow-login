@@ -1285,7 +1285,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      execute_recommendation_approval: {
+        Args: { _expected_resource_id: string; _recommendation_id: string }
+        Returns: undefined
+      }
+      execute_recommendation_rejection: {
+        Args: { _reason?: string; _recommendation_id: string }
+        Returns: undefined
+      }
+      record_work_item_outcome: {
+        Args: {
+          _actual_duration_minutes?: number
+          _actual_resource_id?: string
+          _final_status: string
+          _notes?: string
+          _work_item_id: string
+        }
+        Returns: string
+      }
+      replace_resource_availability: {
+        Args: { _resource_id: string; _slots: Json }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
