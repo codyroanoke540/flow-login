@@ -143,7 +143,7 @@ function AuthPage() {
             {[
               "Proactive AI recommendations across your operation",
               "Optimized scheduling, dispatch, and workforce planning",
-              "SOC 2 Type II, SSO, and audit-ready",
+              "Explainable recommendations with approval and audit history",
             ].map((item) => (
               <li key={item} className="flex items-start gap-3">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-white/80" />
@@ -155,7 +155,7 @@ function AuthPage() {
 
         <div className="relative z-10 flex items-center gap-2 text-xs text-white/70">
           <ShieldCheck className="h-4 w-4" />
-          Enterprise-grade security · GDPR & HIPAA aligned
+          Fictional-data pilot · Do not enter protected health information
         </div>
       </aside>
 
@@ -236,7 +236,7 @@ function AuthPage() {
             {mode === "signin" && (
               <div className="flex items-center gap-2">
                 <Checkbox id="remember" checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
-                <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground">Remember me on this device</Label>
+                <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground">Remember my email on this device</Label>
               </div>
             )}
 
@@ -269,7 +269,7 @@ function AuthPage() {
               )}
             </p>
             <p className="mt-4 text-center text-[11px] text-muted-foreground">
-              By continuing you agree to our Terms of Service and Privacy Policy.
+              Pilot access only. Use fictional data and do not enter protected health information.
             </p>
           </div>
         </div>

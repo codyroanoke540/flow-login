@@ -9,7 +9,11 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:decision": "node scripts/test-decision-engine.mjs",
+    "test:qa": "node scripts/qa-static.mjs",
+    "test": "npm run test:decision && npm run test:qa && npm run test:sql",
+    "test:sql": "node scripts/qa-sql.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.7",

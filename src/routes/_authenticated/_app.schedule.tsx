@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Plus, Sparkles, Wand2, Check, X, Pencil, Ban } from "lucide-react";
+import { Plus, Sparkles, Wand2, Check, X, Pencil, Ban, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,11 @@ import {
   createWorkItem,
   listAccounts,
   listCandidates,
+  listOutcomes,
   listResources,
   listWorkItems,
   previewCandidates,
+  recordOutcome,
   rejectRecommendation,
   runRecommendation,
   updateWorkItem,
@@ -75,6 +77,27 @@ function fromItem(i: any): ItemForm {
   };
 }
 
+function serializeItem(input: ItemForm) {
+  const start = input.scheduled_start ? new Date(input.scheduled_start).toISOString() : null;
+  const end = input.scheduled_end
+    ? new Date(input.scheduled_end).toISOString()
+    : start ? new Date(new Date(start).getTime() + input.duration_minutes * 60_000).toISOString() : null;
+  if (!start) throw new Error("Appointment start date and time are required");
+  if (!end || new Date(end) <= new Date(start)) throw new Error("End must be after start");
+  return {
+    title: input.title.trim(),
+    type: input.type.trim() || "appointment",
+    account_id: input.account_id || null,
+    required_skills: input.required_skills,
+    required_qualifications: input.required_qualifications,
+    duration_minutes: Math.max(1, Number(input.duration_minutes) || 60),
+    priority: Math.min(5, Math.max(1, Number(input.priority) || 3)),
+    scheduled_start: start,
+    scheduled_end: end,
+    notes: input.notes.trim() || null,
+  };
+}
+
 function SchedulePage() {
   const qc = useQueryClient();
   const listItemsFn = useServerFn(listWorkItems);
@@ -88,38 +111,25 @@ function SchedulePage() {
   const rejectFn = useServerFn(rejectRecommendation);
   const previewFn = useServerFn(previewCandidates);
   const listCandFn = useServerFn(listCandidates);
+  const listOutcomesFn = useServerFn(listOutcomes);
+  const recordOutcomeFn = useServerFn(recordOutcome);
 
   const { data: items = [] } = useQuery<any[]>({ queryKey: ["work_items"], queryFn: () => listItemsFn() });
   const { data: resources = [] } = useQuery<any[]>({ queryKey: ["resources"], queryFn: () => listResFn() });
   const { data: accounts = [] } = useQuery<any[]>({ queryKey: ["accounts"], queryFn: () => listAcctFn() });
+  const { data: outcomes = [] } = useQuery<any[]>({ queryKey: ["outcomes"], queryFn: () => listOutcomesFn() });
 
   const resourceById = useMemo(() => new Map((resources as any[]).map((r) => [r.id, r])), [resources]);
   const accountById = useMemo(() => new Map((accounts as any[]).map((a) => [a.id, a])), [accounts]);
+  const outcomeByWorkItem = useMemo(() => new Map((outcomes as any[]).map((o) => [o.work_item_id, o])), [outcomes]);
 
   const [editing, setEditing] = useState<ItemForm | null>(null);
   const [activeRec, setActiveRec] = useState<{ id: string; dto: any } | null>(null);
+  const [outcomeItem, setOutcomeItem] = useState<any | null>(null);
 
   const saveMut = useMutation({
     mutationFn: (input: ItemForm) => {
-      const start = input.scheduled_start ? new Date(input.scheduled_start).toISOString() : null;
-      const end = input.scheduled_end
-        ? new Date(input.scheduled_end).toISOString()
-        : start ? new Date(new Date(start).getTime() + input.duration_minutes * 60_000).toISOString() : null;
-      if (start && end && new Date(end) <= new Date(start)) {
-        throw new Error("End must be after start");
-      }
-      const base = {
-        title: input.title,
-        type: input.type,
-        account_id: input.account_id || null,
-        required_skills: input.required_skills,
-        required_qualifications: input.required_qualifications,
-        duration_minutes: Number(input.duration_minutes) || 60,
-        priority: Number(input.priority) || 3,
-        scheduled_start: start,
-        scheduled_end: end,
-        notes: input.notes || null,
-      };
+      const base = serializeItem(input);
       return input.id
         ? updateFn({ data: { id: input.id, ...base } as any })
         : createFn({ data: base as any });
@@ -128,6 +138,8 @@ function SchedulePage() {
       toast.success("Work item saved");
       setEditing(null);
       qc.invalidateQueries({ queryKey: ["work_items"] });
+      qc.invalidateQueries({ queryKey: ["recommendations"] });
+      qc.invalidateQueries({ queryKey: ["audit_events"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
@@ -142,13 +154,33 @@ function SchedulePage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
+  const outcomeMut = useMutation({
+    mutationFn: (input: {
+      work_item_id: string;
+      final_status: "completed" | "canceled" | "no_show" | "failed";
+      actual_resource_id?: string | null;
+      actual_duration_minutes?: number | null;
+      notes?: string | null;
+    }) => recordOutcomeFn({ data: input }),
+    onSuccess: () => {
+      toast.success("Outcome recorded");
+      setOutcomeItem(null);
+      qc.invalidateQueries({ queryKey: ["work_items"] });
+      qc.invalidateQueries({ queryKey: ["outcomes"] });
+      qc.invalidateQueries({ queryKey: ["audit_events"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+  });
+
   const runMut = useMutation({
     mutationFn: (id: string) => runFn({ data: { work_item_id: id } }),
     onSuccess: (res) => {
       const rec = res.recommendation as any;
       setActiveRec({ id: rec.id, dto: rec });
+      if (!rec.selected_option?.resource_id) toast.warning("No eligible employee was found. Review the disqualification reasons.");
       qc.invalidateQueries({ queryKey: ["recommendations"] });
       qc.invalidateQueries({ queryKey: ["work_items"] });
+      qc.invalidateQueries({ queryKey: ["audit_events"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
@@ -160,13 +192,21 @@ function SchedulePage() {
       setActiveRec(null);
       qc.invalidateQueries({ queryKey: ["work_items"] });
       qc.invalidateQueries({ queryKey: ["recommendations"] });
+      qc.invalidateQueries({ queryKey: ["audit_events"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
   const rejectMut = useMutation({
     mutationFn: (id: string) => rejectFn({ data: { id } }),
-    onSuccess: () => { toast.message("Recommendation rejected"); setActiveRec(null); qc.invalidateQueries({ queryKey: ["recommendations"] }); },
+    onSuccess: () => {
+      toast.message("Recommendation rejected");
+      setActiveRec(null);
+      qc.invalidateQueries({ queryKey: ["recommendations"] });
+      qc.invalidateQueries({ queryKey: ["work_items"] });
+      qc.invalidateQueries({ queryKey: ["audit_events"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
   });
 
   const { data: candidatesForRec = [] } = useQuery<any[]>({
@@ -203,10 +243,13 @@ function SchedulePage() {
               const resource: any = a.assigned_resource_id ? resourceById.get(a.assigned_resource_id) : null;
               const account: any = a.account_id ? accountById.get(a.account_id) : null;
               const when = a.scheduled_start ? new Date(a.scheduled_start).toLocaleString() : "Unscheduled";
-              const canRecommend = a.status !== "assigned" && a.status !== "scheduled" && a.status !== "completed" && a.status !== "canceled";
+              const until = a.scheduled_end ? new Date(a.scheduled_end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
+              const canRecommend = !!a.scheduled_start && a.status !== "assigned" && a.status !== "scheduled" && a.status !== "completed" && a.status !== "canceled";
+              const outcome: any = outcomeByWorkItem.get(a.id);
+              const canRecordOutcome = !outcome && ["assigned", "scheduled", "in_progress"].includes(a.status);
               return (
                 <div key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5">
-                  <div className="w-full font-display text-sm tabular-nums text-muted-foreground sm:w-40">{when}</div>
+                  <div className="w-full font-display text-sm tabular-nums text-muted-foreground sm:w-52">{when}{until ? ` – ${until}` : ""}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       {(a.status === "assigned" || a.status === "scheduled") && <Sparkles className="h-3.5 w-3.5 text-primary" />}
@@ -217,14 +260,21 @@ function SchedulePage() {
                       {resource ? ` · ${resource.name}` : " · Unassigned"}
                     </div>
                   </div>
-                  <Badge variant={a.status === "assigned" || a.status === "scheduled" ? "default" : a.status === "canceled" ? "outline" : "secondary"} className="text-[10px] uppercase tracking-wider">{a.status}</Badge>
+                  <Badge variant={a.status === "assigned" || a.status === "scheduled" ? "default" : a.status === "canceled" ? "outline" : "secondary"} className="text-[10px] uppercase tracking-wider">
+                    {outcome?.actual_result?.final_status ?? a.status}
+                  </Badge>
                   <div className="flex gap-1.5">
-                    <Button size="sm" variant="ghost" onClick={() => setEditing(fromItem(a))}>
+                    <Button size="sm" variant="ghost" aria-label={`Edit ${a.title}`} onClick={() => setEditing(fromItem(a))}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                     {canRecommend && (
                       <Button size="sm" variant="outline" disabled={runMut.isPending} onClick={() => runMut.mutate(a.id)}>
                         <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Recommend
+                      </Button>
+                    )}
+                    {canRecordOutcome && (
+                      <Button size="sm" variant="outline" onClick={() => setOutcomeItem(a)}>
+                        <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Outcome
                       </Button>
                     )}
                   </div>
@@ -245,6 +295,16 @@ function SchedulePage() {
           onCancelWorkItem={(reason) => editing.id && cancelMut.mutate({ id: editing.id, reason })}
           saving={saveMut.isPending}
           previewFn={previewFn}
+        />
+      )}
+
+      {outcomeItem && (
+        <OutcomeSheet
+          item={outcomeItem}
+          resources={resources as any[]}
+          saving={outcomeMut.isPending}
+          onClose={() => setOutcomeItem(null)}
+          onSave={(data) => outcomeMut.mutate(data)}
         />
       )}
 
@@ -287,6 +347,11 @@ function SchedulePage() {
                   ))}
                 </div>
               </div>
+              {!activeRec.dto.selected_option?.resource_id && (
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300">
+                  No employee passed every hard constraint. Edit the appointment or employee availability, skills, qualifications, or time off, then run a new recommendation.
+                </p>
+              )}
               <SheetFooter className="mt-4 gap-2">
                 <Button variant="outline" onClick={() => rejectMut.mutate(activeRec.id)} disabled={rejectMut.isPending}>
                   <X className="mr-1.5 h-3.5 w-3.5" /> Reject
@@ -294,7 +359,7 @@ function SchedulePage() {
                 <Button
                   className="text-white"
                   style={{ backgroundImage: "var(--gradient-brand)" }}
-                  disabled={approveMut.isPending}
+                  disabled={approveMut.isPending || !activeRec.dto.selected_option?.resource_id}
                   onClick={() => approveMut.mutate(activeRec.id)}
                 >
                   <Check className="mr-1.5 h-3.5 w-3.5" /> {approveMut.isPending ? "Applying…" : "Approve"}
@@ -308,6 +373,98 @@ function SchedulePage() {
   );
 }
 
+function OutcomeSheet({
+  item, resources, saving, onClose, onSave,
+}: {
+  item: any;
+  resources: any[];
+  saving: boolean;
+  onClose: () => void;
+  onSave: (data: {
+    work_item_id: string;
+    final_status: "completed" | "canceled" | "no_show" | "failed";
+    actual_resource_id?: string | null;
+    actual_duration_minutes?: number | null;
+    notes?: string | null;
+  }) => void;
+}) {
+  const [finalStatus, setFinalStatus] = useState<"completed" | "canceled" | "no_show" | "failed">("completed");
+  const [resourceId, setResourceId] = useState(item.assigned_resource_id ?? "");
+  const [duration, setDuration] = useState(String(item.duration_minutes ?? 60));
+  const [notes, setNotes] = useState("");
+
+  const submit = () => {
+    const minutes = Number(duration);
+    if (!Number.isInteger(minutes) || minutes <= 0) {
+      toast.error("Actual duration must be a positive whole number");
+      return;
+    }
+    onSave({
+      work_item_id: item.id,
+      final_status: finalStatus,
+      actual_resource_id: resourceId || null,
+      actual_duration_minutes: minutes,
+      notes: notes.trim() || null,
+    });
+  };
+
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Record outcome</SheetTitle>
+          <SheetDescription>Close {item.title} with what actually happened. This becomes part of the audit trail.</SheetDescription>
+        </SheetHeader>
+        <div className="mt-6 space-y-4">
+          <div className="space-y-1.5">
+            <Label>Final status</Label>
+            <Select value={finalStatus} onValueChange={(value) => setFinalStatus(value as typeof finalStatus)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="no_show">No show</SelectItem>
+                <SelectItem value="failed">Failed / could not complete</SelectItem>
+                <SelectItem value="canceled">Canceled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Employee who handled it</Label>
+            <Select value={resourceId || "none"} onValueChange={(value) => setResourceId(value === "none" ? "" : value)}>
+              <SelectTrigger><SelectValue placeholder="Not recorded" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not recorded</SelectItem>
+                {resources.map((resource) => (
+                  <SelectItem key={resource.id} value={resource.id}>{resource.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Actual duration (minutes)</Label>
+            <Input type="number" min={1} max={1440} step={1} value={duration} onChange={(e) => setDuration(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Notes</Label>
+            <Textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What changed or needs follow-up?" />
+          </div>
+        </div>
+        <SheetFooter className="mt-6 gap-2">
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button
+            className="text-white"
+            style={{ backgroundImage: "var(--gradient-brand)" }}
+            disabled={saving}
+            onClick={submit}
+          >
+            {saving ? "Recording…" : "Record outcome"}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function WorkItemSheet({
   form, accounts, onChange, onClose, onSave, onCancelWorkItem, saving, previewFn,
 }: {
@@ -318,7 +475,7 @@ function WorkItemSheet({
   onSave: () => void;
   onCancelWorkItem: (reason: string) => void;
   saving: boolean;
-  previewFn: (args: { data: { work_item_id: string } }) => Promise<any[]>;
+  previewFn: (args: { data: { work_item_id: string; draft?: Record<string, unknown> } }) => Promise<any[]>;
 }) {
   const [skillInput, setSkillInput] = useState("");
   const [qualInput, setQualInput] = useState("");
@@ -327,7 +484,10 @@ function WorkItemSheet({
   const [candidates, setCandidates] = useState<any[] | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
-  const update = (patch: Partial<ItemForm>) => onChange({ ...form, ...patch });
+  const update = (patch: Partial<ItemForm>) => {
+    setCandidates(null);
+    onChange({ ...form, ...patch });
+  };
 
   // Auto-compute end from start+duration when user hasn't set end
   useEffect(() => {
@@ -347,7 +507,8 @@ function WorkItemSheet({
     if (!form.id) return;
     setLoadingPreview(true);
     try {
-      const rows = await previewFn({ data: { work_item_id: form.id } });
+      const draft = serializeItem(form);
+      const rows = await previewFn({ data: { work_item_id: form.id, draft } });
       setCandidates(rows);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
@@ -381,14 +542,29 @@ function WorkItemSheet({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Customer</Label>
-              <Select value={form.account_id} onValueChange={(v) => update({ account_id: v })}>
+              <Select value={form.account_id} onValueChange={(v) => {
+                const account = accounts.find((a) => a.id === v);
+                const unique = (values: string[]) => Array.from(new Map(values.map((x) => [x.trim().toLowerCase(), x.trim()])).values()).filter(Boolean);
+                update({
+                  account_id: v,
+                  required_skills: unique([...form.required_skills, ...(account?.required_skills ?? [])]),
+                  required_qualifications: unique([...form.required_qualifications, ...(account?.required_qualifications ?? [])]),
+                  duration_minutes: Number(account?.default_duration_minutes ?? form.duration_minutes),
+                  scheduled_end: "",
+                });
+              }}>
                 <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
                 <SelectContent>{accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5"><Label>Type</Label><Input value={form.type} onChange={(e) => update({ type: e.target.value })} /></div>
-            <div className="space-y-1.5"><Label>Start</Label><Input type="datetime-local" value={form.scheduled_start} onChange={(e) => update({ scheduled_start: e.target.value })} /></div>
-            <div className="space-y-1.5"><Label>End</Label><Input type="datetime-local" value={form.scheduled_end} onChange={(e) => update({ scheduled_end: e.target.value })} /></div>
+            <div className="space-y-1.5"><Label>Start *</Label><Input type="datetime-local" value={form.scheduled_start} onChange={(e) => update({ scheduled_start: e.target.value, scheduled_end: "" })} /></div>
+            <div className="space-y-1.5"><Label>End *</Label><Input type="datetime-local" value={form.scheduled_end} onChange={(e) => {
+              const end = e.target.value;
+              const startMs = form.scheduled_start ? new Date(form.scheduled_start).getTime() : Number.NaN;
+              const endMs = end ? new Date(end).getTime() : Number.NaN;
+              update({ scheduled_end: end, ...(Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs ? { duration_minutes: Math.round((endMs - startMs) / 60_000) } : {}) });
+            }} /></div>
             <div className="space-y-1.5"><Label>Duration (min)</Label><Input type="number" min={1} value={form.duration_minutes} onChange={(e) => update({ duration_minutes: Number(e.target.value) || 60, scheduled_end: "" })} /></div>
             <div className="space-y-1.5"><Label>Priority (1–5)</Label><Input type="number" min={1} max={5} value={form.priority} onChange={(e) => update({ priority: Number(e.target.value) || 3 })} /></div>
           </div>
@@ -485,7 +661,7 @@ function WorkItemSheet({
               className="text-white"
               style={{ backgroundImage: "var(--gradient-brand)" }}
               onClick={onSave}
-              disabled={!form.title.trim() || saving}
+              disabled={!form.title.trim() || !form.scheduled_start || !form.scheduled_end || saving}
             >
               {saving ? "Saving…" : form.id ? "Save changes" : "Create"}
             </Button>

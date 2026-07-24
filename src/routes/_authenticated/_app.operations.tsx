@@ -49,8 +49,8 @@ function OperationsCenter() {
     enabled: !!active?.id,
   });
 
-  const pending = (recs as any[]).filter((r) => r.status === "pending");
-  const decided = (recs as any[]).filter((r) => r.status !== "pending").slice(0, 10);
+  const attention = (recs as any[]).filter((r) => r.status === "pending" || r.status === "no_match");
+  const decided = (recs as any[]).filter((r) => r.status !== "pending" && r.status !== "no_match").slice(0, 10);
 
   const approveMut = useMutation({
     mutationFn: (id: string) => approveFn({ data: { id } }),
@@ -89,7 +89,7 @@ function OperationsCenter() {
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="tabular-nums">{pending.length} pending</span>
+          <span className="tabular-nums">{attention.length} need attention</span>
           <span aria-hidden>·</span>
           <span>Live</span>
           <span className="relative flex h-2 w-2" aria-hidden>
@@ -124,10 +124,10 @@ function OperationsCenter() {
         <>
           <section>
             <div className="mb-3">
-              <h2 className="font-display text-lg font-semibold tracking-tight">Pending recommendations</h2>
-              <p className="text-sm text-muted-foreground">Awaiting your approval — every decision revalidated server-side.</p>
+              <h2 className="font-display text-lg font-semibold tracking-tight">Needs attention</h2>
+              <p className="text-sm text-muted-foreground">Approve eligible recommendations or fix appointments where no employee passed every hard constraint.</p>
             </div>
-            {pending.length === 0 ? (
+            {attention.length === 0 ? (
               <Card className="border-dashed">
                 <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
                   <div className="grid h-10 w-10 place-items-center rounded-full bg-secondary">
@@ -140,7 +140,7 @@ function OperationsCenter() {
               </Card>
             ) : (
               <div className="grid gap-3">
-                {pending.map((r: any) => {
+                {attention.map((r: any) => {
                   const wi = (items as any[]).find((i) => i.id === r.work_item_id);
                   const resource = (resources as any[]).find((res) => res.id === r.selected_option?.resource_id);
                   const canApprove = !!r.selected_option?.resource_id && !!r.work_item_id;
@@ -149,7 +149,9 @@ function OperationsCenter() {
                       <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">Decision Engine</Badge>
+                            <Badge variant={r.status === "no_match" ? "outline" : "secondary"} className="text-[10px] uppercase tracking-wider">
+                              {r.status === "no_match" ? "No match" : "Decision Engine"}
+                            </Badge>
                             <span className="text-xs text-muted-foreground">{r.confidence_score}% confidence</span>
                           </div>
                           <CardTitle className="mt-2 font-display text-base font-semibold leading-snug">
@@ -180,9 +182,16 @@ function OperationsCenter() {
                       </CardHeader>
                       <CardContent className="text-sm text-muted-foreground">
                         {!canApprove && (
-                          <p className="mb-2 text-xs font-medium text-amber-600 dark:text-amber-400">
-                            No eligible resource. Open Details to see why each candidate was disqualified.
-                          </p>
+                          <div className="mb-2 space-y-2">
+                            <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                              No eligible employee. Open Details to see why each candidate was disqualified.
+                            </p>
+                            {wi?.id && (
+                              <Link to="/schedule" className="inline-flex text-xs font-medium text-primary hover:underline">
+                                Edit the appointment and run again
+                              </Link>
+                            )}
+                          </div>
                         )}
                         {r.selected_option?.reasoning ?? r.reasoning?.text ?? r.trigger}
                       </CardContent>
@@ -287,7 +296,7 @@ function OperationsCenter() {
                   ))}
                 </div>
               </section>
-              {active.status === "pending" && (
+              {(active.status === "pending" || active.status === "no_match") && (
                 <div className="flex flex-wrap gap-2 border-t pt-4">
                   <Button variant="outline" onClick={() => rejectMut.mutate(active.id)} disabled={rejectMut.isPending}>
                     <X className="mr-1.5 h-3.5 w-3.5" /> Reject

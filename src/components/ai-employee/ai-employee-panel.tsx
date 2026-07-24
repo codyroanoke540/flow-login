@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import { AI_ROLE_LIST, AI_ROLES, DEFAULT_ROLE, type AiRoleId } from "@/lib/ai/roles";
 import { loadMemory, memorySummary, rememberTurn } from "@/lib/ai/memory";
 import { describePage } from "./page-context";
@@ -63,9 +64,12 @@ export function AiEmployeePanel({
     rememberTurn("user", content);
 
     try {
+      const { data: authData } = await supabase.auth.getSession();
+      const token = authData.session?.access_token;
+      if (!token) throw new Error("Sign in again to use the AI Employee.");
       const res = await fetch("/api/ai-employee", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           role,
           messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),

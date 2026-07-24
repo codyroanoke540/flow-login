@@ -24,6 +24,7 @@ function AppShell() {
   const orgName = (session?.active_organization as any)?.name ?? null;
   const role = (session?.role as string | null) ?? null;
   const terminology = (session?.settings as any)?.terminology ?? {};
+  const aiEmployeeEnabled = (session?.settings as any)?.feature_flags?.ai_employee_enabled === true;
 
   return (
     <TerminologyProvider value={terminology}>
@@ -35,7 +36,7 @@ function AppShell() {
             <main className="flex-1 min-w-0 pb-24 md:pb-8">
               <Outlet />
             </main>
-            <AiEmployeeLauncher />
+            {aiEmployeeEnabled && <AiEmployeeLauncher />}
           </SidebarInset>
         </div>
       </SidebarProvider>

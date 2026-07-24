@@ -30,6 +30,7 @@ export interface ResourceQualification {
   resource_id: ID;
   qualification_code: string;
   expires_on: string | null;
+  status?: string;
 }
 
 export interface TimeOff {
@@ -52,6 +53,11 @@ export interface Account {
   tier: string;
   preferences: { weights?: Partial<ScoreWeights>; preferred_resource_ids?: ID[] } & Record<string, unknown>;
   location_id: ID | null;
+  required_skills?: string[];
+  required_qualifications?: string[];
+  preferred_resource_ids?: ID[];
+  default_duration_minutes?: number;
+  timezone?: string | null;
 }
 
 export interface WorkItem {
@@ -69,6 +75,8 @@ export interface WorkItem {
   status: string;
   assigned_resource_id: ID | null;
   metadata: { weights?: Partial<ScoreWeights> } & Record<string, unknown>;
+  /** IANA timezone used to interpret weekly availability (derived from account/org settings). */
+  timezone?: string;
 }
 
 export interface DecisionConstraint {

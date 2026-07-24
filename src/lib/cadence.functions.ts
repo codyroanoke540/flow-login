@@ -24,21 +24,95 @@ import type {
 
 type Ctx = { supabase: any; userId: string };
 
+
+const emptyStringToNull = (value: unknown) => value === "" ? null : value;
+const optionalEmail = z.preprocess(emptyStringToNull, z.string().trim().email().nullable().optional());
+const optionalNullableString = z.preprocess(emptyStringToNull, z.string().trim().nullable().optional());
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
+
+function isValidTimezone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeList(values: string[] | undefined): string[] | undefined {
+  if (!values) return undefined;
+  const seen = new Set<string>();
+  return values
+    .map((value) => value.trim())
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function normalizeWindow(input: {
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
+  duration_minutes?: number;
+}) {
+  const start = input.scheduled_start ? new Date(input.scheduled_start) : null;
+  const end = input.scheduled_end ? new Date(input.scheduled_end) : null;
+  if (start && Number.isNaN(start.getTime())) throw new Error("Invalid start date/time.");
+  if (end && Number.isNaN(end.getTime())) throw new Error("Invalid end date/time.");
+  let normalizedEnd = end;
+  let duration = input.duration_minutes;
+  if (start && !normalizedEnd) {
+    duration = Math.max(1, Math.round(duration ?? 60));
+    normalizedEnd = new Date(start.getTime() + duration * 60_000);
+  }
+  if (start && normalizedEnd) {
+    if (normalizedEnd <= start) throw new Error("End must be after start.");
+    duration = Math.max(1, Math.round((normalizedEnd.getTime() - start.getTime()) / 60_000));
+  }
+  return {
+    scheduled_start: start?.toISOString() ?? input.scheduled_start ?? null,
+    scheduled_end: normalizedEnd?.toISOString() ?? input.scheduled_end ?? null,
+    duration_minutes: duration,
+  };
+}
+
+async function assertEntityInOrg(ctx: Ctx, table: string, id: string, orgId: string, label: string) {
+  const { data, error } = await ctx.supabase.from(table).select("id").eq("id", id).eq("org_id", orgId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(`${label} not found in the active organization.`);
+}
+
 async function resolveActiveOrg(ctx: Ctx): Promise<string> {
-  const { data: prof } = await ctx.supabase
+  const { data: prof, error: profileError } = await ctx.supabase
     .from("profiles").select("active_organization_id").eq("id", ctx.userId).maybeSingle();
-  if (prof?.active_organization_id) return prof.active_organization_id as string;
-  const { data: mem } = await ctx.supabase
-    .from("org_members").select("org_id").eq("user_id", ctx.userId).eq("status", "active").limit(1);
+  if (profileError) throw new Error(profileError.message);
+  if (prof?.active_organization_id) {
+    const { data: activeMembership, error: activeMembershipError } = await ctx.supabase
+      .from("org_members").select("org_id")
+      .eq("org_id", prof.active_organization_id)
+      .eq("user_id", ctx.userId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (activeMembershipError) throw new Error(activeMembershipError.message);
+    if (activeMembership) return prof.active_organization_id as string;
+  }
+  const { data: mem, error: membershipError } = await ctx.supabase
+    .from("org_members").select("org_id").eq("user_id", ctx.userId).eq("status", "active").order("created_at").limit(1);
+  if (membershipError) throw new Error(membershipError.message);
   const orgId = mem?.[0]?.org_id;
   if (!orgId) throw new Error("No active organization for this user.");
-  await ctx.supabase.from("profiles").update({ active_organization_id: orgId }).eq("id", ctx.userId);
+  const { error: profileUpdateError } = await ctx.supabase.from("profiles")
+    .update({ active_organization_id: orgId }).eq("id", ctx.userId);
+  if (profileUpdateError) throw new Error(profileUpdateError.message);
   return orgId as string;
 }
 
 async function getRole(ctx: Ctx, orgId: string): Promise<string | null> {
-  const { data } = await ctx.supabase
+  const { data, error } = await ctx.supabase
     .from("org_members").select("role").eq("org_id", orgId).eq("user_id", ctx.userId).eq("status", "active").maybeSingle();
+  if (error) throw new Error(error.message);
   return (data?.role as string) ?? null;
 }
 
@@ -61,13 +135,14 @@ async function writeAudit(ctx: Ctx, orgId: string, event: {
   pipeline_version?: string;
 }) {
   const role = await getRole(ctx, orgId);
-  await ctx.supabase.from("audit_events").insert({
+  const { error } = await ctx.supabase.from("audit_events").insert({
     org_id: orgId,
     actor_user_id: ctx.userId,
     actor_role: role,
     source: event.source ?? "app",
     ...event,
   });
+  if (error) throw new Error(`Audit write failed: ${error.message}`);
 }
 
 // ---------- Session / Org --------------------------------------------------
@@ -84,8 +159,12 @@ export const getSession = createServerFn({ method: "GET" })
         .select("id, org_id, role, status, organizations!inner(id, name)")
         .eq("user_id", context.userId).eq("status", "active"),
     ]);
-    const { data: settings } = await context.supabase
+    for (const result of [profileRes, orgRes, memberships]) {
+      if (result.error) throw new Error(result.error.message);
+    }
+    const { data: settings, error: settingsError } = await context.supabase
       .from("organization_settings").select("*").eq("org_id", orgId).maybeSingle();
+    if (settingsError) throw new Error(settingsError.message);
     const role = await getRole(context, orgId);
     return {
       user_id: context.userId,
@@ -101,10 +180,13 @@ export const setActiveOrganization = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({ org_id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
-    const { data: mem } = await context.supabase
+    const { data: mem, error: membershipError } = await context.supabase
       .from("org_members").select("id").eq("org_id", data.org_id).eq("user_id", context.userId).eq("status", "active").maybeSingle();
+    if (membershipError) throw new Error(membershipError.message);
     if (!mem) throw new Error("Not a member of that organization.");
-    await context.supabase.from("profiles").update({ active_organization_id: data.org_id }).eq("id", context.userId);
+    const { error: updateError } = await context.supabase.from("profiles")
+      .update({ active_organization_id: data.org_id }).eq("id", context.userId);
+    if (updateError) throw new Error(updateError.message);
     return { ok: true };
   });
 
@@ -150,15 +232,15 @@ export const upsertResource = createServerFn({ method: "POST" })
   .inputValidator((i: unknown) => z.object({
     id: z.string().uuid().optional(),
     name: z.string().min(1),
-    email: z.string().email().nullable().optional(),
-    phone: z.string().nullable().optional(),
+    email: optionalEmail,
+    phone: optionalNullableString,
     type: z.string().default("employee"),
     skills: z.array(z.string()).default([]),
     location_id: z.string().uuid().nullable().optional(),
-    weekly_capacity_hours: z.number().default(40),
-    cost_rate: z.number().default(0),
-    status: z.string().default("active"),
-    notes: z.string().nullable().optional(),
+    weekly_capacity_hours: z.number().min(0).max(168).default(40),
+    cost_rate: z.number().min(0).default(0),
+    status: z.enum(["active", "inactive"]).default("active"),
+    notes: optionalNullableString,
   }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
@@ -168,7 +250,7 @@ export const upsertResource = createServerFn({ method: "POST" })
       email: data.email ?? null,
       phone: data.phone ?? null,
       type: data.type,
-      skills: data.skills,
+      skills: normalizeList(data.skills) ?? [],
       location_id: data.location_id ?? null,
       capacity: data.weekly_capacity_hours,
       weekly_capacity_hours: data.weekly_capacity_hours,
@@ -219,13 +301,33 @@ export const setAvailability = createServerFn({ method: "POST" })
   }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
-    await context.supabase.from("resource_availability").delete().eq("resource_id", data.resource_id).eq("org_id", orgId);
-    if (data.slots.length) {
-      const rows = data.slots.map((s) => ({ ...s, resource_id: data.resource_id, org_id: orgId }));
-      const { error } = await context.supabase.from("resource_availability").insert(rows);
-      if (error) throw new Error(error.message);
+    assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
+    await assertEntityInOrg(context, "resources", data.resource_id, orgId, "Resource");
+    const seen = new Set<string>();
+    const byDay = new Map<number, Array<{ start: string; end: string }>>();
+    for (const slot of data.slots) {
+      if (!TIME_RE.test(slot.start_time) || !TIME_RE.test(slot.end_time)) throw new Error("Availability times must use HH:MM format.");
+      const start = slot.start_time.slice(0, 5);
+      const end = slot.end_time.slice(0, 5);
+      if (start >= end) throw new Error("Availability end must be after start.");
+      const key = `${slot.weekday}:${start}-${end}`;
+      if (seen.has(key)) throw new Error("Duplicate availability window.");
+      seen.add(key);
+      const day = byDay.get(slot.weekday) ?? [];
+      if (day.some((other) => start < other.end && other.start < end)) throw new Error("Availability windows cannot overlap.");
+      day.push({ start, end });
+      byDay.set(slot.weekday, day);
     }
-    await writeAudit(context, orgId, { action: "availability.updated", entity_type: "resource", entity_id: data.resource_id, new_state: { slots: data.slots } });
+    const slots = data.slots.map((slot) => ({
+      weekday: slot.weekday,
+      start_time: slot.start_time.slice(0, 5),
+      end_time: slot.end_time.slice(0, 5),
+    }));
+    const { error } = await context.supabase.rpc("replace_resource_availability", {
+      _resource_id: data.resource_id,
+      _slots: slots,
+    });
+    if (error) throw new Error(error.message);
     return { ok: true };
   });
 
@@ -233,7 +335,8 @@ export const listAvailability = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const orgId = await resolveActiveOrg(context);
-    const { data } = await context.supabase.from("resource_availability").select("*").eq("org_id", orgId);
+    const { data, error } = await context.supabase.from("resource_availability").select("*").eq("org_id", orgId);
+    if (error) throw new Error(error.message);
     return data ?? [];
   });
 
@@ -247,13 +350,22 @@ export const addResourceQualification = createServerFn({ method: "POST" })
     qualification_name: z.string().nullable().optional(),
     qualification_type: z.string().nullable().optional(),
     credential_number: z.string().nullable().optional(),
-    status: z.string().default("active"),
+    status: z.enum(["active", "inactive", "suspended", "revoked"]).default("active"),
     notes: z.string().nullable().optional(),
     issued_on: z.string().nullable().optional(),
     expires_on: z.string().nullable().optional(),
   }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
+    assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
+    await assertEntityInOrg(context, "resources", data.resource_id, orgId, "Resource");
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (data.issued_on && !datePattern.test(data.issued_on)) throw new Error("Issue date must use YYYY-MM-DD.");
+    if (data.expires_on && !datePattern.test(data.expires_on)) throw new Error("Expiration date must use YYYY-MM-DD.");
+    if (data.issued_on && data.expires_on && data.expires_on < data.issued_on) {
+      throw new Error("Expiration date cannot be before issue date.");
+    }
+    data.qualification_code = data.qualification_code.trim();
     const { data: saved, error } = await context.supabase
       .from("resource_qualifications")
       .upsert({ org_id: orgId, ...data }, { onConflict: "resource_id,qualification_code" })
@@ -268,6 +380,7 @@ export const removeResourceQualification = createServerFn({ method: "POST" })
   .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
+    assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
     const { error } = await context.supabase.from("resource_qualifications").delete().eq("id", data.id).eq("org_id", orgId);
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, { action: "qualification.removed", entity_type: "resource_qualifications", entity_id: data.id });
@@ -278,7 +391,8 @@ export const listResourceQualifications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const orgId = await resolveActiveOrg(context);
-    const { data } = await context.supabase.from("resource_qualifications").select("*").eq("org_id", orgId);
+    const { data, error } = await context.supabase.from("resource_qualifications").select("*").eq("org_id", orgId);
+    if (error) throw new Error(error.message);
     return data ?? [];
   });
 
@@ -295,6 +409,12 @@ export const createTimeOff = createServerFn({ method: "POST" })
   }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
+    assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
+    await assertEntityInOrg(context, "resources", data.resource_id, orgId, "Resource");
+    const startsAt = new Date(data.starts_at);
+    const endsAt = new Date(data.ends_at);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) throw new Error("Invalid time-off date/time.");
+    if (endsAt <= startsAt) throw new Error("Time-off end must be after start.");
     const { data: saved, error } = await context.supabase
       .from("resource_time_off").insert({ org_id: orgId, ...data }).select("*").single();
     if (error) throw new Error(error.message);
@@ -307,6 +427,7 @@ export const deleteTimeOff = createServerFn({ method: "POST" })
   .inputValidator((i: unknown) => z.object({ id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
+    assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
     const { error } = await context.supabase.from("resource_time_off").delete().eq("id", data.id).eq("org_id", orgId);
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, { action: "time_off.deleted", entity_type: "resource_time_off", entity_id: data.id });
@@ -317,7 +438,8 @@ export const listTimeOff = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const orgId = await resolveActiveOrg(context);
-    const { data } = await context.supabase.from("resource_time_off").select("*").eq("org_id", orgId).order("starts_at");
+    const { data, error } = await context.supabase.from("resource_time_off").select("*").eq("org_id", orgId).order("starts_at");
+    if (error) throw new Error(error.message);
     return data ?? [];
   });
 
@@ -341,26 +463,41 @@ export const upsertAccount = createServerFn({ method: "POST" })
     type: z.string().default("customer"),
     tier: z.string().default("standard"),
     location_id: z.string().uuid().nullable().optional(),
-    contact_name: z.string().nullable().optional(),
-    contact_email: z.string().nullable().optional(),
-    contact_phone: z.string().nullable().optional(),
-    service_address: z.string().nullable().optional(),
-    city: z.string().nullable().optional(),
-    state: z.string().nullable().optional(),
-    zip: z.string().nullable().optional(),
-    timezone: z.string().nullable().optional(),
+    contact_name: optionalNullableString,
+    contact_email: optionalEmail,
+    contact_phone: optionalNullableString,
+    service_address: optionalNullableString,
+    city: optionalNullableString,
+    state: optionalNullableString,
+    zip: optionalNullableString,
+    timezone: optionalNullableString,
     required_skills: z.array(z.string()).default([]),
     required_qualifications: z.array(z.string()).default([]),
-    preferred_resource_ids: z.array(z.string().uuid()).default([]),
-    default_duration_minutes: z.number().int().positive().default(60),
-    notes: z.string().nullable().optional(),
-    preferences: z.record(z.string(), z.unknown()).default({}),
-    status: z.string().default("active"),
+    preferred_resource_ids: z.array(z.string().uuid()).optional(),
+    default_duration_minutes: z.number().int().positive().max(1440).optional(),
+    notes: optionalNullableString,
+    preferences: z.record(z.string(), z.unknown()).optional(),
+    status: z.enum(["active", "inactive"]).default("active"),
   }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
-    const { id, ...rest } = data;
+    if (data.timezone && !isValidTimezone(data.timezone)) throw new Error("Timezone must be a valid IANA name, such as America/New_York.");
+    for (const resourceId of data.preferred_resource_ids ?? []) {
+      await assertEntityInOrg(context, "resources", resourceId, orgId, "Preferred resource");
+    }
+    const { id, ...parsed } = data;
+    const rest: Record<string, unknown> = Object.fromEntries(Object.entries(parsed).filter(([, value]) => value !== undefined));
+    rest.required_skills = normalizeList(data.required_skills) ?? [];
+    rest.required_qualifications = normalizeList(data.required_qualifications) ?? [];
+    if (!id) {
+      rest.type ??= "customer";
+      rest.tier ??= "standard";
+      rest.status ??= "active";
+      rest.default_duration_minutes ??= 60;
+      rest.preferred_resource_ids ??= [];
+      rest.preferences ??= {};
+    }
     let saved: any = null;
     if (id) {
       const { data: r, error } = await context.supabase
@@ -429,11 +566,16 @@ export const createWorkItem = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
-    let scheduled_end = data.scheduled_end;
-    if (!scheduled_end && data.scheduled_start) {
-      scheduled_end = new Date(new Date(data.scheduled_start).getTime() + data.duration_minutes * 60_000).toISOString();
-    }
-    const row = { ...data, scheduled_end, org_id: orgId, status: "unassigned" as const };
+    if (data.account_id) await assertEntityInOrg(context, "accounts", data.account_id, orgId, "Account");
+    const window = normalizeWindow(data);
+    const row = {
+      ...data,
+      ...window,
+      required_skills: normalizeList(data.required_skills) ?? [],
+      required_qualifications: normalizeList(data.required_qualifications) ?? [],
+      org_id: orgId,
+      status: "unassigned" as const,
+    };
     const { data: saved, error } = await context.supabase
       .from("work_items").insert(row).select("*").single();
     if (error) throw new Error(error.message);
@@ -463,9 +605,38 @@ export const updateWorkItem = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
-    const { id, ...patch } = data;
+    const { id, ...incoming } = data;
+    const { data: current, error: currentError } = await context.supabase
+      .from("work_items").select("*").eq("id", id).eq("org_id", orgId).single();
+    if (currentError || !current) throw new Error(currentError?.message ?? "Work item not found.");
+    if (incoming.account_id) await assertEntityInOrg(context, "accounts", incoming.account_id, orgId, "Account");
+    if (incoming.assigned_resource_id) await assertEntityInOrg(context, "resources", incoming.assigned_resource_id, orgId, "Resource");
+    const merged = { ...current, ...incoming };
+    const window = normalizeWindow(merged);
+    const patch = {
+      ...incoming,
+      ...window,
+      required_skills: incoming.required_skills ? normalizeList(incoming.required_skills) : undefined,
+      required_qualifications: incoming.required_qualifications ? normalizeList(incoming.required_qualifications) : undefined,
+    };
+    const cleanPatch = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+    const decisionFields = [
+      "account_id", "scheduled_start", "scheduled_end", "duration_minutes",
+      "required_skills", "required_qualifications", "location_id",
+    ];
+    const decisionInputsChanged = decisionFields.some((key) => key in incoming);
+    if (decisionInputsChanged && current.assigned_resource_id) {
+      cleanPatch.assigned_resource_id = null;
+      cleanPatch.status = "unassigned";
+    }
+    if (decisionInputsChanged) {
+      const { error: supersedeError } = await context.supabase.from("recommendations")
+        .update({ status: "superseded" })
+        .eq("org_id", orgId).eq("work_item_id", id).in("status", ["pending", "no_match"]);
+      if (supersedeError) throw new Error(supersedeError.message);
+    }
     const { data: saved, error } = await context.supabase
-      .from("work_items").update(patch).eq("id", id).eq("org_id", orgId).select("*").single();
+      .from("work_items").update(cleanPatch).eq("id", id).eq("org_id", orgId).select("*").single();
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, { action: "work_item.updated", entity_type: "work_item", entity_id: id, new_state: saved });
     return saved;
@@ -473,10 +644,41 @@ export const updateWorkItem = createServerFn({ method: "POST" })
 
 export const previewCandidates = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ work_item_id: z.string().uuid() }).parse(i))
+  .inputValidator((i: unknown) => z.object({
+    work_item_id: z.string().uuid(),
+    draft: z.object({
+      title: z.string().optional(),
+      account_id: z.string().uuid().nullable().optional(),
+      scheduled_start: z.string().nullable().optional(),
+      scheduled_end: z.string().nullable().optional(),
+      duration_minutes: z.number().int().positive().optional(),
+      required_skills: z.array(z.string()).optional(),
+      required_qualifications: z.array(z.string()).optional(),
+      priority: z.number().int().min(1).max(5).optional(),
+    }).optional(),
+  }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     const ctx = await loadPipelineContext(context.supabase, orgId, data.work_item_id);
+    if (data.draft) {
+      const merged = { ...ctx.workItem, ...data.draft };
+      const window = normalizeWindow(merged);
+      ctx.workItem = {
+        ...merged,
+        ...window,
+        required_skills: normalizeList(merged.required_skills) ?? [],
+        required_qualifications: normalizeList(merged.required_qualifications) ?? [],
+      } as WorkItem;
+      if (ctx.workItem.account_id && ctx.workItem.account_id !== ctx.account?.id) {
+        const { data: account } = await context.supabase.from("accounts").select("*")
+          .eq("id", ctx.workItem.account_id).eq("org_id", orgId).maybeSingle();
+        ctx.account = (account as Account) ?? null;
+      } else if (!ctx.workItem.account_id) {
+        ctx.account = null;
+      }
+      ctx.workItem.timezone = ctx.account?.timezone || ctx.organizationTimezone || "UTC";
+    }
+    if (!ctx.workItem.scheduled_start) throw new Error("Set an appointment date and start time before checking eligibility.");
     const { scored } = runPipeline({ trigger: "preview", ...ctx, approvalLevel: 2 });
     return scored
       .map((c) => ({
@@ -495,12 +697,16 @@ export const previewCandidates = createServerFn({ method: "POST" })
 
 export const cancelWorkItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ id: z.string().uuid(), reason: z.string().optional() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ id: z.string().uuid(), reason: z.string().trim().min(1).max(500) }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler"]);
+    const { error: supersedeError } = await context.supabase.from("recommendations")
+      .update({ status: "superseded" })
+      .eq("org_id", orgId).eq("work_item_id", data.id).in("status", ["pending", "no_match"]);
+    if (supersedeError) throw new Error(supersedeError.message);
     const { data: saved, error } = await context.supabase
-      .from("work_items").update({ status: "canceled", canceled_reason: data.reason ?? null } as never)
+      .from("work_items").update({ status: "canceled", canceled_reason: data.reason } as never)
       .eq("id", data.id).eq("org_id", orgId).select("*").single();
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, { action: "work_item.canceled", entity_type: "work_item", entity_id: data.id, reason: data.reason, new_state: saved });
@@ -510,7 +716,7 @@ export const cancelWorkItem = createServerFn({ method: "POST" })
 // ---------- Decision pipeline --------------------------------------------
 
 async function loadPipelineContext(supabase: any, orgId: string, workItemId: string) {
-  const [workItemRes, resourcesRes, availabilityRes, qualsRes, timeOffRes, constraintsRes, assignmentsRes] = await Promise.all([
+  const [workItemRes, resourcesRes, availabilityRes, qualsRes, timeOffRes, constraintsRes, assignmentsRes, organizationRes] = await Promise.all([
     supabase.from("work_items").select("*").eq("id", workItemId).eq("org_id", orgId).single(),
     supabase.from("resources").select("*").eq("org_id", orgId),
     supabase.from("resource_availability").select("*").eq("org_id", orgId),
@@ -519,16 +725,24 @@ async function loadPipelineContext(supabase: any, orgId: string, workItemId: str
     supabase.from("decision_constraints").select("*").eq("org_id", orgId).eq("active", true),
     supabase.from("work_items").select("id, assigned_resource_id, scheduled_start, scheduled_end, duration_minutes")
       .eq("org_id", orgId).not("assigned_resource_id", "is", null).neq("status", "canceled"),
+    supabase.from("organizations").select("timezone").eq("id", orgId).maybeSingle(),
   ]);
 
-  if (workItemRes.error) throw new Error(workItemRes.error.message);
+  const contextErrors = [
+    workItemRes.error, resourcesRes.error, availabilityRes.error, qualsRes.error,
+    timeOffRes.error, constraintsRes.error, assignmentsRes.error, organizationRes.error,
+  ].filter(Boolean);
+  if (contextErrors.length) throw new Error(contextErrors[0].message);
+  if (!workItemRes.data) throw new Error("Work item not found.");
   const workItem = workItemRes.data as WorkItem;
 
   let account: Account | null = null;
   if (workItem.account_id) {
-    const { data } = await supabase.from("accounts").select("*").eq("id", workItem.account_id).single();
+    const { data, error } = await supabase.from("accounts").select("*").eq("id", workItem.account_id).eq("org_id", orgId).single();
+    if (error) throw new Error(error.message);
     account = (data as Account) ?? null;
   }
+  workItem.timezone = account?.timezone || organizationRes.data?.timezone || "UTC";
 
   const assignments: AssignedWindow[] = ((assignmentsRes.data ?? []) as any[]).map((r) => {
     const start = r.scheduled_start ? new Date(r.scheduled_start).toISOString() : new Date().toISOString();
@@ -539,13 +753,32 @@ async function loadPipelineContext(supabase: any, orgId: string, workItemId: str
   });
 
   const load: ResourceLoad[] = [];
-  const now = workItem.scheduled_start ? new Date(workItem.scheduled_start) : new Date();
-  const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay()); weekStart.setHours(0, 0, 0, 0);
-  const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7);
+  const target = workItem.scheduled_start ? new Date(workItem.scheduled_start) : new Date();
+  const timezone = workItem.timezone || "UTC";
+  const targetLocal = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(target);
+  const part = (type: Intl.DateTimeFormatPartTypes) => targetLocal.find((p) => p.type === type)?.value ?? "";
+  const weekdayIndex = ({ Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 } as Record<string, number>)[part("weekday")] ?? 0;
+  const targetDateKey = `${part("year")}-${part("month")}-${part("day")}`;
+  const targetDateUtc = new Date(`${targetDateKey}T00:00:00Z`);
+  const weekStartDate = new Date(targetDateUtc);
+  weekStartDate.setUTCDate(targetDateUtc.getUTCDate() - weekdayIndex);
+  const weekEndDate = new Date(weekStartDate);
+  weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 7);
+  const weekStartKey = weekStartDate.toISOString().slice(0, 10);
+  const weekEndKey = weekEndDate.toISOString().slice(0, 10);
+  const localDateKey = (value: string) => {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(new Date(value));
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  };
   for (const a of assignments) {
-    const s = new Date(a.scheduled_start);
-    if (s >= weekStart && s < weekEnd) {
-      const mins = (new Date(a.scheduled_end).getTime() - s.getTime()) / 60_000;
+    const startKey = localDateKey(a.scheduled_start);
+    if (startKey >= weekStartKey && startKey < weekEndKey) {
+      const start = new Date(a.scheduled_start);
+      const mins = Math.max(0, (new Date(a.scheduled_end).getTime() - start.getTime()) / 60_000);
       const found = load.find((l) => l.resource_id === a.resource_id);
       if (found) found.minutes_scheduled += mins;
       else load.push({ resource_id: a.resource_id, minutes_scheduled: mins });
@@ -562,6 +795,7 @@ async function loadPipelineContext(supabase: any, orgId: string, workItemId: str
     constraints: (constraintsRes.data ?? []) as DecisionConstraint[],
     assignments,
     load,
+    organizationTimezone: organizationRes.data?.timezone || "UTC",
   };
 }
 
@@ -572,6 +806,11 @@ export const runRecommendation = createServerFn({ method: "POST" })
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler", "supervisor"]);
     const ctx = await loadPipelineContext(context.supabase, orgId, data.work_item_id);
+    if (!ctx.workItem.scheduled_start) throw new Error("Set an appointment date and start time before generating a recommendation.");
+    const { error: supersedeError } = await context.supabase.from("recommendations")
+      .update({ status: "superseded" })
+      .eq("org_id", orgId).eq("work_item_id", data.work_item_id).in("status", ["pending", "no_match"]);
+    if (supersedeError) throw new Error(supersedeError.message);
     const { dto, scored } = runPipeline({
       trigger: data.trigger ?? "Manual: recommend best resource",
       ...ctx,
@@ -592,14 +831,15 @@ export const runRecommendation = createServerFn({ method: "POST" })
         risks: dto.risks as never,
         alternatives: dto.alternatives as never,
         approval_level: dto.approval_level,
-        status: "pending",
+        status: dto.recommendation.resource_id ? "pending" : "no_match",
       } as never)
       .select("*").single();
     if (error) throw new Error(error.message);
 
+    let eligibleRank = 0;
     const candidateRows = scored
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
-      .map((c, i) => ({
+      .map((c) => ({
         org_id: orgId,
         recommendation_id: saved.id,
         resource_id: c.resource.id,
@@ -608,16 +848,18 @@ export const runRecommendation = createServerFn({ method: "POST" })
         disqualification_reasons: c.disqualifiers as never,
         factor_scores: c.factors as never,
         weighted_score: c.score,
-        rank: c.score !== null ? i + 1 : null,
+        rank: c.score !== null ? ++eligibleRank : null,
         explanation: c.explanation ?? null,
       }));
     if (candidateRows.length) {
-      await context.supabase.from("recommendation_candidates").insert(candidateRows);
+      const { error: candidateError } = await context.supabase.from("recommendation_candidates").insert(candidateRows);
+      if (candidateError) throw new Error(candidateError.message);
     }
 
-    await context.supabase.from("work_items")
-      .update({ status: "pending_approval" })
+    const { error: workItemStatusError } = await context.supabase.from("work_items")
+      .update({ status: dto.recommendation.resource_id ? "pending_approval" : "unassigned" })
       .eq("id", ctx.workItem.id).eq("org_id", orgId);
+    if (workItemStatusError) throw new Error(workItemStatusError.message);
 
     await writeAudit(context, orgId, {
       action: "recommendation.generated",
@@ -636,10 +878,11 @@ export const listCandidates = createServerFn({ method: "POST" })
   .inputValidator((i: unknown) => z.object({ recommendation_id: z.string().uuid() }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
-    const { data: rows } = await context.supabase
+    const { data: rows, error } = await context.supabase
       .from("recommendation_candidates").select("*")
       .eq("recommendation_id", data.recommendation_id).eq("org_id", orgId)
       .order("eligible", { ascending: false }).order("weighted_score", { ascending: false, nullsFirst: false });
+    if (error) throw new Error(error.message);
     return rows ?? [];
   });
 
@@ -680,80 +923,26 @@ export const approveRecommendation = createServerFn({ method: "POST" })
       throw new Error(`Cannot approve: ${reasons}`);
     }
 
-    const { error: uerr } = await context.supabase
-      .from("work_items")
-      .update({ assigned_resource_id: selected.resource_id, status: "assigned" })
-      .eq("id", rec.work_item_id).eq("org_id", orgId);
-    if (uerr) throw new Error(uerr.message);
-
-    const { error: eerr } = await context.supabase
-      .from("recommendations").update({ status: "approved" }).eq("id", rec.id).eq("org_id", orgId);
-    if (eerr) throw new Error(eerr.message);
-
-    await context.supabase.from("approvals").insert({
-      org_id: orgId,
-      recommendation_id: rec.id,
-      approver_user_id: context.userId,
-      approver_role: role,
-      status: "approved",
-      approved_at: new Date().toISOString(),
+    const { error: executeError } = await context.supabase.rpc("execute_recommendation_approval", {
+      _recommendation_id: data.id,
+      _expected_resource_id: selected.resource_id,
     });
-
-    await writeAudit(context, orgId, {
-      action: "recommendation.approved",
-      entity_type: "recommendation",
-      entity_id: rec.id,
-      recommendation_id: rec.id,
-      new_state: { assigned_resource_id: selected.resource_id, work_item_id: rec.work_item_id },
-    });
-    await writeAudit(context, orgId, {
-      action: "work_item.assigned",
-      entity_type: "work_item",
-      entity_id: rec.work_item_id,
-      recommendation_id: rec.id,
-      new_state: { assigned_resource_id: selected.resource_id },
-    });
+    if (executeError) throw new Error(executeError.message);
 
     return { ok: true };
   });
 
 export const rejectRecommendation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((i: unknown) => z.object({ id: z.string().uuid(), reason: z.string().optional() }).parse(i))
+  .inputValidator((i: unknown) => z.object({ id: z.string().uuid(), reason: z.string().trim().max(500).optional() }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
-    const role = await getRole(context, orgId);
-    assertRole(role, ["owner", "admin", "operations_manager", "scheduler", "supervisor"]);
-    const { data: rec } = await context.supabase.from("recommendations").select("*").eq("id", data.id).eq("org_id", orgId).single();
-    if (!rec) throw new Error("Not found");
-
-    const { error } = await context.supabase
-      .from("recommendations").update({ status: "rejected" }).eq("id", data.id).eq("org_id", orgId);
+    assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler", "supervisor"]);
+    const { error } = await context.supabase.rpc("execute_recommendation_rejection", {
+      _recommendation_id: data.id,
+      _reason: data.reason ?? null,
+    });
     if (error) throw new Error(error.message);
-
-    if (rec.work_item_id) {
-      await context.supabase.from("work_items")
-        .update({ status: "unassigned" })
-        .eq("id", rec.work_item_id).eq("org_id", orgId)
-        .in("status", ["pending_approval", "pending_recommendation"]);
-    }
-
-    await context.supabase.from("approvals").insert({
-      org_id: orgId,
-      recommendation_id: data.id,
-      approver_user_id: context.userId,
-      approver_role: role,
-      status: "rejected",
-      reason: data.reason ?? null,
-      rejected_at: new Date().toISOString(),
-    });
-    await writeAudit(context, orgId, {
-      action: "recommendation.rejected",
-      entity_type: "recommendation",
-      entity_id: data.id,
-      recommendation_id: data.id,
-      reason: data.reason,
-    });
     return { ok: true };
   });
 
@@ -763,41 +952,29 @@ export const recordOutcome = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((i: unknown) => z.object({
     work_item_id: z.string().uuid(),
-    final_status: z.enum(["completed", "canceled", "no_show", "reassigned", "failed"]),
+    final_status: z.enum(["completed", "canceled", "no_show", "failed"]),
     actual_resource_id: z.string().uuid().nullable().optional(),
-    actual_duration_minutes: z.number().int().nullable().optional(),
-    notes: z.string().nullable().optional(),
+    actual_duration_minutes: z.number().int().positive().max(1440).nullable().optional(),
+    notes: z.string().trim().max(2000).nullable().optional(),
   }).parse(i))
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler", "supervisor"]);
-    const { data: wi } = await context.supabase
-      .from("work_items").select("*").eq("id", data.work_item_id).eq("org_id", orgId).maybeSingle();
-    if (!wi) throw new Error("Work item not found");
-    const expected = { assigned_resource_id: wi.assigned_resource_id, duration_minutes: wi.duration_minutes };
-    const actual = {
-      resource_id: data.actual_resource_id ?? wi.assigned_resource_id,
-      duration_minutes: data.actual_duration_minutes ?? wi.duration_minutes,
-      final_status: data.final_status,
-      notes: data.notes,
-    };
-    const variance = {
-      resource_changed: actual.resource_id !== expected.assigned_resource_id,
-      duration_delta_minutes: (actual.duration_minutes ?? 0) - (expected.duration_minutes ?? 0),
-    };
-    const { data: saved, error } = await context.supabase.from("outcomes").insert({
-      org_id: orgId,
-      work_item_id: data.work_item_id,
-      actual_result: actual as never,
-      expected_result: expected as never,
-      variance: variance as never,
-    }).select("*").single();
-    if (error) throw new Error(error.message);
-    const newStatus = data.final_status === "completed" ? "completed" : data.final_status === "canceled" ? "canceled" : wi.status;
-    await context.supabase.from("work_items").update({ status: newStatus }).eq("id", data.work_item_id).eq("org_id", orgId);
-    await writeAudit(context, orgId, {
-      action: "outcome.recorded", entity_type: "work_item", entity_id: data.work_item_id, new_state: actual, previous_state: expected,
+    await assertEntityInOrg(context, "work_items", data.work_item_id, orgId, "Work item");
+    if (data.actual_resource_id) {
+      await assertEntityInOrg(context, "resources", data.actual_resource_id, orgId, "Resource");
+    }
+    const { data: outcomeId, error: rpcError } = await context.supabase.rpc("record_work_item_outcome", {
+      _work_item_id: data.work_item_id,
+      _final_status: data.final_status,
+      _actual_resource_id: data.actual_resource_id ?? null,
+      _actual_duration_minutes: data.actual_duration_minutes ?? null,
+      _notes: data.notes ?? null,
     });
+    if (rpcError) throw new Error(rpcError.message);
+    const { data: saved, error } = await context.supabase.from("outcomes")
+      .select("*").eq("id", outcomeId).eq("org_id", orgId).single();
+    if (error) throw new Error(error.message);
     return saved;
   });
 
@@ -805,7 +982,8 @@ export const listOutcomes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const orgId = await resolveActiveOrg(context);
-    const { data } = await context.supabase.from("outcomes").select("*").eq("org_id", orgId).order("recorded_at", { ascending: false }).limit(200);
+    const { data, error } = await context.supabase.from("outcomes").select("*").eq("org_id", orgId).order("recorded_at", { ascending: false }).limit(200);
+    if (error) throw new Error(error.message);
     return data ?? [];
   });
 
@@ -815,6 +993,7 @@ export const listAuditEvents = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const orgId = await resolveActiveOrg(context);
+    assertRole(await getRole(context, orgId), ["owner", "admin"]);
     const { data, error } = await context.supabase
       .from("audit_events").select("*").eq("org_id", orgId)
       .order("created_at", { ascending: false }).limit(200);
@@ -834,8 +1013,11 @@ export const updateOrganization = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin"]);
+    if (data.timezone !== undefined && !isValidTimezone(data.timezone)) {
+      throw new Error("Timezone must be a valid IANA name, such as America/New_York.");
+    }
     const patch: Record<string, unknown> = {};
-    if (data.name !== undefined) patch.name = data.name;
+    if (data.name !== undefined) patch.name = data.name.trim();
     if (data.website !== undefined) patch.website = data.website;
     if (data.timezone !== undefined) patch.timezone = data.timezone;
     if (Object.keys(patch).length === 0) return { ok: true };

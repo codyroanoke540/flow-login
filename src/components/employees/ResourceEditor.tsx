@@ -105,7 +105,7 @@ export function ResourceEditor(props: Props) {
   );
   const [quals, setQuals] = useState<any[]>(() => (editing ? props.qualifications ?? [] : []));
   const [tos, setTos] = useState<any[]>(() => (editing ? props.timeOff ?? [] : []));
-  const [newQual, setNewQual] = useState({ qualification_code: "", qualification_type: "", credential_number: "", expires_on: "", issued_on: "" });
+  const [newQual, setNewQual] = useState({ qualification_code: "", qualification_type: "", credential_number: "", expires_on: "", issued_on: "", status: "active" });
   const [newTo, setNewTo] = useState({ starts_at: "", ends_at: "", reason: "" });
 
   // Keep local state in sync when the source data changes (query refetch after mutations)
@@ -140,7 +140,7 @@ export function ResourceEditor(props: Props) {
     onSuccess: (saved: any) => {
       toast.success("Qualification added");
       setQuals((q) => [...q.filter((x) => x.id !== saved.id), saved]);
-      setNewQual({ qualification_code: "", qualification_type: "", credential_number: "", expires_on: "", issued_on: "" });
+      setNewQual({ qualification_code: "", qualification_type: "", credential_number: "", expires_on: "", issued_on: "", status: "active" });
       qc.invalidateQueries({ queryKey: ["qualifications"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
@@ -317,19 +317,37 @@ export function ResourceEditor(props: Props) {
                   <div className="space-y-1"><Label>Type</Label><Input value={newQual.qualification_type} onChange={(e) => setNewQual((q) => ({ ...q, qualification_type: e.target.value }))} placeholder="Certification" /></div>
                   <div className="space-y-1"><Label>Credential #</Label><Input value={newQual.credential_number} onChange={(e) => setNewQual((q) => ({ ...q, credential_number: e.target.value }))} /></div>
                   <div className="space-y-1"><Label>Issued</Label><Input type="date" value={newQual.issued_on} onChange={(e) => setNewQual((q) => ({ ...q, issued_on: e.target.value }))} /></div>
-                  <div className="space-y-1 sm:col-span-2"><Label>Expires on</Label><Input type="date" value={newQual.expires_on} onChange={(e) => setNewQual((q) => ({ ...q, expires_on: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Expires on</Label><Input type="date" value={newQual.expires_on} onChange={(e) => setNewQual((q) => ({ ...q, expires_on: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>Status</Label>
+                    <Select value={newQual.status} onValueChange={(status) => setNewQual((q) => ({ ...q, status }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                        <SelectItem value="suspended">Suspended</SelectItem>
+                        <SelectItem value="revoked">Revoked</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <Button
                   className="mt-3"
                   disabled={!newQual.qualification_code || addQualMut.isPending}
-                  onClick={() => addQualMut.mutate({
+                  onClick={() => {
+                    if (newQual.issued_on && newQual.expires_on && newQual.expires_on < newQual.issued_on) {
+                      toast.error("Expiration date cannot be before issue date");
+                      return;
+                    }
+                    addQualMut.mutate({
                     resource_id: props.resource.id,
                     qualification_code: newQual.qualification_code,
                     qualification_type: newQual.qualification_type || null,
                     credential_number: newQual.credential_number || null,
                     issued_on: newQual.issued_on || null,
                     expires_on: newQual.expires_on || null,
-                  })}
+                    status: newQual.status,
+                  });
+                  }}
                 >
                   <Plus className="mr-1 h-3.5 w-3.5" /> Add
                 </Button>
@@ -339,7 +357,10 @@ export function ResourceEditor(props: Props) {
               ) : (
                 <div className="space-y-2">
                   {quals.map((q) => {
-                    const expired = q.expires_on && new Date(q.expires_on) < new Date();
+                    const today = new Date();
+                    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+                    const expired = q.expires_on && q.expires_on < todayKey;
+                    const inactive = q.status && q.status !== "active";
                     return (
                       <div key={q.id} className="flex flex-wrap items-center gap-2 rounded-md border p-3 text-sm">
                         <div className="min-w-0 flex-1">
@@ -350,6 +371,7 @@ export function ResourceEditor(props: Props) {
                             {q.expires_on ? <>Expires {q.expires_on}</> : "No expiration"}
                           </p>
                         </div>
+                        {inactive && <Badge variant="outline" className="capitalize">{q.status}</Badge>}
                         {expired && <Badge variant="destructive">Expired</Badge>}
                         <Button size="sm" variant="ghost" onClick={() => removeQualMut.mutate(q.id)}>
                           <Trash2 className="h-3.5 w-3.5" />

@@ -33,6 +33,83 @@ export function resolveWeights(
 
 // ---- Hard constraint checks (deterministic) --------------------------------
 
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+function safeTimezone(timezone?: string | null): string {
+  const candidate = timezone?.trim() || "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format(new Date());
+    return candidate;
+  } catch {
+    return "UTC";
+  }
+}
+
+function zonedDateParts(date: Date, timezone?: string | null): {
+  weekday: number;
+  minutes: number;
+  dateKey: string;
+} {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: safeTimezone(timezone),
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  const weekday = WEEKDAY_INDEX[value("weekday")] ?? 0;
+  const hour = Number(value("hour"));
+  const minute = Number(value("minute"));
+  return {
+    weekday,
+    minutes: hour * 60 + minute,
+    dateKey: `${value("year")}-${value("month")}-${value("day")}`,
+  };
+}
+
+function effectiveDurationMinutes(workItem: WorkItem): number {
+  const w = windowOf(workItem);
+  if (w) {
+    const minutes = Math.round((w.end.getTime() - w.start.getTime()) / 60_000);
+    if (minutes > 0) return minutes;
+  }
+  return Math.max(1, workItem.duration_minutes || 60);
+}
+
+function mergeRequirements(account: Account | null, workItem: WorkItem): WorkItem {
+  const unique = (values: string[]) => {
+    const seen = new Set<string>();
+    return values.filter((value) => {
+      const key = value.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  return {
+    ...workItem,
+    required_skills: unique([...(account?.required_skills ?? []), ...(workItem.required_skills ?? [])]),
+    required_qualifications: unique([
+      ...(account?.required_qualifications ?? []),
+      ...(workItem.required_qualifications ?? []),
+    ]),
+    timezone: workItem.timezone || account?.timezone || "UTC",
+  };
+}
+
+
 function windowOf(workItem: WorkItem): { start: Date; end: Date } | null {
   if (!workItem.scheduled_start) return null;
   const start = new Date(workItem.scheduled_start);
@@ -57,13 +134,18 @@ function checkAvailabilityFit(
   if (!anyForResource) {
     return { code: "unavailable", detail: "Weekly availability has not been configured" };
   }
-  const slots = availability.filter((a) => a.resource_id === resource.id && a.weekday === w.start.getDay());
+  const startLocal = zonedDateParts(w.start, workItem.timezone);
+  const endLocal = zonedDateParts(w.end, workItem.timezone);
+  if (startLocal.dateKey !== endLocal.dateKey) {
+    return { code: "unavailable", detail: "Weekly availability does not support appointments that cross midnight" };
+  }
+  const slots = availability.filter((a) => a.resource_id === resource.id && a.weekday === startLocal.weekday);
   if (!slots.length) {
-    const dayName = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][w.start.getDay()];
+    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][startLocal.weekday];
     return { code: "unavailable", detail: `Not available on ${dayName}` };
   }
-  const startMins = w.start.getHours() * 60 + w.start.getMinutes();
-  const endMins = w.end.getHours() * 60 + w.end.getMinutes();
+  const startMins = startLocal.minutes;
+  const endMins = endLocal.minutes;
   const covers = slots.some((slot) => {
     const [sh, sm] = slot.start_time.split(":").map(Number);
     const [eh, em] = slot.end_time.split(":").map(Number);
@@ -122,14 +204,17 @@ function checkQualifications(
   if (!required.length) return null;
   const w = windowOf(workItem);
   const asOf = w?.start ?? new Date();
-  const held = quals.filter((q) => q.resource_id === resource.id);
+  const held = quals.filter(
+    (q) => q.resource_id === resource.id && (q.status ?? "active").toLowerCase() === "active",
+  );
   const codes = new Set(held.map((q) => q.qualification_code.toLowerCase()));
   for (const req of required) {
     if (!codes.has(req.toLowerCase())) {
       return { code: "missing_qualification", detail: `Missing required qualification: ${req}` };
     }
     const match = held.find((q) => q.qualification_code.toLowerCase() === req.toLowerCase())!;
-    if (match.expires_on && new Date(match.expires_on) < asOf) {
+    const asOfDate = zonedDateParts(asOf, workItem.timezone).dateKey;
+    if (match.expires_on && match.expires_on.slice(0, 10) < asOfDate) {
       return { code: "expired_qualification", detail: `Qualification ${req} expired on ${match.expires_on}` };
     }
   }
@@ -144,7 +229,7 @@ function checkCapacity(
   const weeklyMinutes = Math.max(0, (resource.weekly_capacity_hours ?? resource.capacity ?? 40) * 60);
   if (!weeklyMinutes) return null;
   const current = load.find((l) => l.resource_id === resource.id)?.minutes_scheduled ?? 0;
-  const projected = current + (workItem.duration_minutes || 60);
+  const projected = current + effectiveDurationMinutes(workItem);
   return projected > weeklyMinutes
     ? {
         code: "capacity_exceeded",
@@ -212,7 +297,8 @@ function skillMatchScore(resource: Resource, workItem: WorkItem): number {
 function availabilityScore(resource: Resource, workItem: WorkItem, availability: Availability[]): number {
   const w = windowOf(workItem);
   if (!w) return 0.9;
-  const slots = availability.filter((a) => a.resource_id === resource.id && a.weekday === w.start.getDay());
+  const local = zonedDateParts(w.start, workItem.timezone);
+  const slots = availability.filter((a) => a.resource_id === resource.id && a.weekday === local.weekday);
   if (!slots.length) return 0;
   return 1;
 }
@@ -232,7 +318,8 @@ function costEfficiencyScore(resource: Resource, allResources: Resource[]): numb
 }
 
 function priorityAlignmentScore(resource: Resource, workItem: WorkItem, account: Account | null): number {
-  if (workItem.priority >= 4 && account?.preferences?.preferred_resource_ids?.includes(resource.id)) return 1;
+  const preferred = account?.preferred_resource_ids ?? account?.preferences?.preferred_resource_ids ?? [];
+  if (workItem.priority >= 4 && preferred.includes(resource.id)) return 1;
   if (workItem.priority >= 4) return 0.6;
   return 0.8;
 }
@@ -245,7 +332,7 @@ function historicalPerformanceScore(resource: Resource): number {
 function workloadBalanceScore(resource: Resource, load: ResourceLoad[], workItem: WorkItem): number {
   const capacityMins = Math.max(1, (resource.weekly_capacity_hours ?? resource.capacity ?? 40) * 60);
   const current = load.find((l) => l.resource_id === resource.id)?.minutes_scheduled ?? 0;
-  const projected = (current + workItem.duration_minutes) / capacityMins;
+  const projected = (current + effectiveDurationMinutes(workItem)) / capacityMins;
   return Math.max(0, 1 - projected);
 }
 
@@ -326,8 +413,10 @@ export function runPipeline(input: {
   load: ResourceLoad[];
   approvalLevel?: 0 | 1 | 2;
 }): { dto: RecommendationDTO; scored: ScoredCandidate[] } {
-  const weights = resolveWeights(input.account, input.workItem);
-  const scored = scoreCandidates({ ...input, weights });
+  const workItem = mergeRequirements(input.account, input.workItem);
+  const normalizedInput = { ...input, workItem };
+  const weights = resolveWeights(input.account, workItem);
+  const scored = scoreCandidates({ ...normalizedInput, weights });
   const valid = scored
     .filter((s) => s.score !== null)
     .sort((a, b) => (b.score! - a.score!)) as (ScoredCandidate & { score: number })[];
@@ -371,15 +460,15 @@ export function runPipeline(input: {
   const dto: RecommendationDTO = {
     trigger: input.trigger,
     context: {
-      work_item: input.workItem,
+      work_item: workItem,
       available_resources: input.resources.map((r) => ({ id: r.id, name: r.name, skills: r.skills })),
       active_constraints: input.constraints.filter((c) => c.active).map((c) => ({ id: c.id, name: c.name, type: c.type })),
       relevant_history: [],
     },
     recommendation: {
       action: winner
-        ? `Assign "${input.workItem.title}" to ${winner.resource.name}`
-        : `Cannot assign "${input.workItem.title}" — no eligible resource.`,
+        ? `Assign "${workItem.title}" to ${winner.resource.name}`
+        : `Cannot assign "${workItem.title}" — no eligible resource.`,
       resource_id: winner?.resource.id ?? null,
       reasoning,
       confidence: confidence.value,
@@ -387,11 +476,11 @@ export function runPipeline(input: {
     },
     impact: {
       cost: winner && winner.resource.cost_rate > 0
-        ? `~$${Math.round(winner.resource.cost_rate * (input.workItem.duration_minutes / 60))} labor`
+        ? `~$${Math.round(winner.resource.cost_rate * (effectiveDurationMinutes(workItem) / 60))} labor`
         : "Cost rate not set",
-      time: `${input.workItem.duration_minutes} min`,
+      time: `${effectiveDurationMinutes(workItem)} min`,
       risk_level: impactRisk,
-      affected_accounts: input.workItem.account_id ? [input.workItem.account_id] : [],
+      affected_accounts: workItem.account_id ? [workItem.account_id] : [],
     },
     alternatives,
     risks,

@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { listAccounts, setAccountStatus, upsertAccount } from "@/lib/cadence.functions";
+import { listAccounts, listResources, setAccountStatus, upsertAccount } from "@/lib/cadence.functions";
 
 export const Route = createFileRoute("/_authenticated/_app/customers")({
   head: () => ({ meta: [{ title: "Customers — Cadence" }] }),
@@ -43,6 +43,7 @@ type AccountForm = {
   timezone: string;
   required_skills: string[];
   required_qualifications: string[];
+  preferred_resource_ids: string[];
   default_duration_minutes: number;
   notes: string;
 };
@@ -52,7 +53,7 @@ function emptyForm(): AccountForm {
     name: "", type: "customer", tier: "standard", status: "active",
     contact_name: "", contact_email: "", contact_phone: "",
     service_address: "", city: "", state: "", zip: "", timezone: "",
-    required_skills: [], required_qualifications: [],
+    required_skills: [], required_qualifications: [], preferred_resource_ids: [],
     default_duration_minutes: 60, notes: "",
   };
 }
@@ -73,6 +74,7 @@ function fromRow(a: any): AccountForm {
     timezone: a.timezone ?? "",
     required_skills: a.required_skills ?? [],
     required_qualifications: a.required_qualifications ?? [],
+    preferred_resource_ids: a.preferred_resource_ids ?? [],
     default_duration_minutes: Number(a.default_duration_minutes ?? 60),
     notes: a.notes ?? "",
   };
@@ -81,9 +83,11 @@ function fromRow(a: any): AccountForm {
 function CustomersPage() {
   const listFn = useServerFn(listAccounts);
   const upsertFn = useServerFn(upsertAccount);
+  const listResourcesFn = useServerFn(listResources);
   const statusFn = useServerFn(setAccountStatus);
   const qc = useQueryClient();
   const { data: accounts = [] } = useQuery<any[]>({ queryKey: ["accounts"], queryFn: () => listFn() });
+  const { data: resources = [] } = useQuery<any[]>({ queryKey: ["resources"], queryFn: () => listResourcesFn() });
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<AccountForm | null>(null);
 
@@ -184,6 +188,7 @@ function CustomersPage() {
       {editing && (
         <AccountSheet
           form={editing}
+          resources={resources as any[]}
           onChange={setEditing}
           onClose={() => setEditing(null)}
           onSave={() => saveMut.mutate(editing)}
@@ -195,9 +200,10 @@ function CustomersPage() {
 }
 
 function AccountSheet({
-  form, onChange, onClose, onSave, saving,
+  form, resources, onChange, onClose, onSave, saving,
 }: {
   form: AccountForm;
+  resources: any[];
   onChange: (f: AccountForm) => void;
   onClose: () => void;
   onSave: () => void;
@@ -205,6 +211,7 @@ function AccountSheet({
 }) {
   const [skillInput, setSkillInput] = useState("");
   const [qualInput, setQualInput] = useState("");
+  const [preferredInput, setPreferredInput] = useState("");
   // Prevent stale-closure edits — always work off the current form
   useEffect(() => {}, [form]);
   const update = (patch: Partial<AccountForm>) => onChange({ ...form, ...patch });
@@ -300,6 +307,35 @@ function AccountSheet({
                 placeholder="e.g. RBT" />
               <Button type="button" variant="outline" onClick={addQual}>Add</Button>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Preferred employees</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {form.preferred_resource_ids.map((id) => {
+                const resource = resources.find((r) => r.id === id);
+                return (
+                  <Badge key={id} variant="outline" className="gap-1 font-normal">
+                    {resource?.name ?? "Unknown employee"}
+                    <button type="button" aria-label={`Remove ${resource?.name ?? "preferred employee"}`} onClick={() => update({ preferred_resource_ids: form.preferred_resource_ids.filter((x) => x !== id) })}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                );
+              })}
+              {form.preferred_resource_ids.length === 0 && <span className="text-xs text-muted-foreground">None</span>}
+            </div>
+            <Select value={preferredInput} onValueChange={(id) => {
+              setPreferredInput("");
+              if (!form.preferred_resource_ids.includes(id)) update({ preferred_resource_ids: [...form.preferred_resource_ids, id] });
+            }}>
+              <SelectTrigger><SelectValue placeholder="Add a preferred employee" /></SelectTrigger>
+              <SelectContent>
+                {resources.filter((r) => r.status === "active" && !form.preferred_resource_ids.includes(r.id)).map((r) => (
+                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Default appointment duration (min)</Label>
