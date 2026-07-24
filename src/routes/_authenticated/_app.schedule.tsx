@@ -32,6 +32,7 @@ import {
   runRecommendation,
   updateWorkItem,
 } from "@/lib/cadence.functions";
+import { useTerminology } from "@/lib/terminology";
 
 export const Route = createFileRoute("/_authenticated/_app/schedule")({
   head: () => ({ meta: [{ title: "Schedule — Cadence" }] }),
@@ -99,6 +100,7 @@ function serializeItem(input: ItemForm) {
 }
 
 function SchedulePage() {
+  const t = useTerminology();
   const qc = useQueryClient();
   const listItemsFn = useServerFn(listWorkItems);
   const listResFn = useServerFn(listResources);
@@ -220,11 +222,11 @@ function SchedulePage() {
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-semibold tracking-tight">Schedule</h1>
-          <p className="mt-1 text-muted-foreground">Every appointment routed through the Cadence decision engine.</p>
+          <p className="mt-1 text-muted-foreground">Every {t.appointment.toLowerCase()} routed through the Cadence decision engine.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button className="text-white" style={{ backgroundImage: "var(--gradient-brand)" }} onClick={() => setEditing(emptyItem())}>
-            <Plus className="mr-1.5 h-4 w-4" /> New appointment
+            <Plus className="mr-1.5 h-4 w-4" /> New {t.appointment.toLowerCase()}
           </Button>
         </div>
       </header>
@@ -232,8 +234,8 @@ function SchedulePage() {
       {items.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-            <h3 className="font-display text-lg font-semibold">No appointments yet</h3>
-            <p className="max-w-md text-sm text-muted-foreground">Add employees and customers, then create your first appointment — Cadence will recommend the best assignment.</p>
+            <h3 className="font-display text-lg font-semibold">No {t.appointments.toLowerCase()} yet</h3>
+            <p className="max-w-md text-sm text-muted-foreground">Add {t.employees.toLowerCase()} and {t.customers.toLowerCase()}, then create your first {t.appointment.toLowerCase()} — Cadence will recommend the best assignment.</p>
           </CardContent>
         </Card>
       ) : (

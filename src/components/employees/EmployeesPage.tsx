@@ -18,12 +18,14 @@ import {
   upsertResource,
 } from "@/lib/cadence.functions";
 import { ResourceEditor } from "./ResourceEditor";
+import { useTerminology } from "@/lib/terminology";
 
 function initialsOf(name: string) {
   return name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 }
 
 export function EmployeesPage() {
+  const t = useTerminology();
   const listFn = useServerFn(listResources);
   const listAvailFn = useServerFn(listAvailability);
   const listQualFn = useServerFn(listResourceQualifications);
@@ -82,8 +84,8 @@ export function EmployeesPage() {
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Employees</h1>
-          <p className="mt-1 text-muted-foreground">The workforce Cadence assigns from. Availability and qualifications drive every recommendation.</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">{t.employees}</h1>
+          <p className="mt-1 text-muted-foreground">The {t.employees.toLowerCase()} Cadence assigns from. Availability and {t.qualifications.toLowerCase()} drive every recommendation.</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -91,7 +93,7 @@ export function EmployeesPage() {
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="h-9 w-56 rounded-lg pl-9 sm:w-64" />
           </div>
           <Button className="text-white" style={{ backgroundImage: "var(--gradient-brand)" }} onClick={() => setCreating(true)}>
-            <Plus className="mr-1.5 h-4 w-4" /> Add employee
+            <Plus className="mr-1.5 h-4 w-4" /> Add {t.employee.toLowerCase()}
           </Button>
         </div>
       </header>
@@ -99,8 +101,8 @@ export function EmployeesPage() {
       {list.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-            <h3 className="font-display text-lg font-semibold">No employees yet</h3>
-            <p className="max-w-md text-sm text-muted-foreground">Add your first team member so Cadence can recommend assignments. You'll set their skills, qualifications, and weekly availability next.</p>
+            <h3 className="font-display text-lg font-semibold">No {t.employees.toLowerCase()} yet</h3>
+            <p className="max-w-md text-sm text-muted-foreground">Add your first {t.employee.toLowerCase()} so Cadence can recommend assignments. You'll set their skills, {t.qualifications.toLowerCase()}, and weekly availability next.</p>
           </CardContent>
         </Card>
       ) : (

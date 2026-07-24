@@ -22,23 +22,25 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-
-const primary = [
-  { title: "Operations Center", url: "/operations", icon: Radar },
-  { title: "Schedule", url: "/schedule", icon: CalendarDays },
-  { title: "Employees", url: "/employees", icon: Users },
-  { title: "Customers", url: "/customers", icon: Contact },
-] as const;
-
-const system = [
-  { title: "Audit history", url: "/audit", icon: History, requiresRole: ["owner", "admin"] as string[] },
-  { title: "Settings", url: "/settings", icon: Settings },
-] as const;
+import { useTerminology } from "@/lib/terminology";
 
 export function AppSidebar({ role }: { role?: string | null }) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const t = useTerminology();
+
+  const primary = [
+    { title: "Operations Center", url: "/operations", icon: Radar },
+    { title: t.appointments, url: "/schedule", icon: CalendarDays },
+    { title: t.employees, url: "/employees", icon: Users },
+    { title: t.customers, url: "/customers", icon: Contact },
+  ] as const;
+
+  const system = [
+    { title: "Audit history", url: "/audit", icon: History, requiresRole: ["owner", "admin"] as string[] },
+    { title: "Settings", url: "/settings", icon: Settings },
+  ] as const;
 
   const renderItems = (
     items: readonly { title: string; url: string; icon: typeof LayoutDashboard; requiresRole?: string[] }[],

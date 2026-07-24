@@ -23,6 +23,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { SetupChecklist } from "@/components/onboarding/SetupChecklist";
 
 export const Route = createFileRoute("/_authenticated/_app/operations")({
   head: () => ({ meta: [{ title: "Operations Center — Cadence" }] }),
@@ -78,6 +79,7 @@ function OperationsCenter() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-6 sm:px-6 sm:py-8">
+      <SetupChecklist />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-2 inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs font-medium text-muted-foreground">

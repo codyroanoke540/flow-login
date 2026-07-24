@@ -21,6 +21,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { listAccounts, listResources, setAccountStatus, upsertAccount } from "@/lib/cadence.functions";
+import { useTerminology } from "@/lib/terminology";
 
 export const Route = createFileRoute("/_authenticated/_app/customers")({
   head: () => ({ meta: [{ title: "Customers — Cadence" }] }),
@@ -81,6 +82,7 @@ function fromRow(a: any): AccountForm {
 }
 
 function CustomersPage() {
+  const t = useTerminology();
   const listFn = useServerFn(listAccounts);
   const upsertFn = useServerFn(upsertAccount);
   const listResourcesFn = useServerFn(listResources);
@@ -99,7 +101,7 @@ function CustomersPage() {
   const saveMut = useMutation({
     mutationFn: (input: AccountForm) => upsertFn({ data: input as any }),
     onSuccess: () => {
-      toast.success("Customer saved");
+      toast.success(`${t.customer} saved`);
       setEditing(null);
       qc.invalidateQueries({ queryKey: ["accounts"] });
     },
@@ -115,8 +117,8 @@ function CustomersPage() {
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">Customers</h1>
-          <p className="mt-1 text-muted-foreground">Accounts Cadence schedules work for.</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">{t.customers}</h1>
+          <p className="mt-1 text-muted-foreground">{t.customers} Cadence schedules work for.</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -124,7 +126,7 @@ function CustomersPage() {
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="h-9 w-56 rounded-lg pl-9 sm:w-64" />
           </div>
           <Button className="text-white" style={{ backgroundImage: "var(--gradient-brand)" }} onClick={() => setEditing(emptyForm())}>
-            <Plus className="mr-1.5 h-4 w-4" /> Add customer
+            <Plus className="mr-1.5 h-4 w-4" /> Add {t.customer.toLowerCase()}
           </Button>
         </div>
       </header>
@@ -132,7 +134,7 @@ function CustomersPage() {
       {list.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-            <h3 className="font-display text-lg font-semibold">No customers yet</h3>
+            <h3 className="font-display text-lg font-semibold">No {t.customers.toLowerCase()} yet</h3>
             <p className="max-w-md text-sm text-muted-foreground">Add your first account to start scheduling work against it.</p>
           </CardContent>
         </Card>
