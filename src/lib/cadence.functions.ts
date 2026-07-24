@@ -323,7 +323,7 @@ export const setAvailability = createServerFn({ method: "POST" })
       start_time: slot.start_time.slice(0, 5),
       end_time: slot.end_time.slice(0, 5),
     }));
-    const { error } = await context.supabase.rpc("replace_resource_availability", {
+    const { error } = await (context.supabase.rpc as any)("replace_resource_availability", {
       _resource_id: data.resource_id,
       _slots: slots,
     });
@@ -636,7 +636,7 @@ export const updateWorkItem = createServerFn({ method: "POST" })
       if (supersedeError) throw new Error(supersedeError.message);
     }
     const { data: saved, error } = await context.supabase
-      .from("work_items").update(cleanPatch).eq("id", id).eq("org_id", orgId).select("*").single();
+      .from("work_items").update(cleanPatch as any).eq("id", id).eq("org_id", orgId).select("*").single();
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, { action: "work_item.updated", entity_type: "work_item", entity_id: id, new_state: saved });
     return saved;
