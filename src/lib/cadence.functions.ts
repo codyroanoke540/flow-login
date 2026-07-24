@@ -323,7 +323,7 @@ export const setAvailability = createServerFn({ method: "POST" })
       start_time: slot.start_time.slice(0, 5),
       end_time: slot.end_time.slice(0, 5),
     }));
-    const { error } = await context.supabase.rpc("replace_resource_availability", {
+    const { error } = await (context.supabase.rpc as any)("replace_resource_availability", {
       _resource_id: data.resource_id,
       _slots: slots,
     });
@@ -636,7 +636,7 @@ export const updateWorkItem = createServerFn({ method: "POST" })
       if (supersedeError) throw new Error(supersedeError.message);
     }
     const { data: saved, error } = await context.supabase
-      .from("work_items").update(cleanPatch).eq("id", id).eq("org_id", orgId).select("*").single();
+      .from("work_items").update(cleanPatch as any).eq("id", id).eq("org_id", orgId).select("*").single();
     if (error) throw new Error(error.message);
     await writeAudit(context, orgId, { action: "work_item.updated", entity_type: "work_item", entity_id: id, new_state: saved });
     return saved;
@@ -923,7 +923,7 @@ export const approveRecommendation = createServerFn({ method: "POST" })
       throw new Error(`Cannot approve: ${reasons}`);
     }
 
-    const { error: executeError } = await context.supabase.rpc("execute_recommendation_approval", {
+    const { error: executeError } = await (context.supabase.rpc as any)("execute_recommendation_approval", {
       _recommendation_id: data.id,
       _expected_resource_id: selected.resource_id,
     });
@@ -938,7 +938,7 @@ export const rejectRecommendation = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const orgId = await resolveActiveOrg(context);
     assertRole(await getRole(context, orgId), ["owner", "admin", "operations_manager", "scheduler", "supervisor"]);
-    const { error } = await context.supabase.rpc("execute_recommendation_rejection", {
+    const { error } = await (context.supabase.rpc as any)("execute_recommendation_rejection", {
       _recommendation_id: data.id,
       _reason: data.reason ?? null,
     });
@@ -964,7 +964,7 @@ export const recordOutcome = createServerFn({ method: "POST" })
     if (data.actual_resource_id) {
       await assertEntityInOrg(context, "resources", data.actual_resource_id, orgId, "Resource");
     }
-    const { data: outcomeId, error: rpcError } = await context.supabase.rpc("record_work_item_outcome", {
+    const { data: outcomeId, error: rpcError } = await (context.supabase.rpc as any)("record_work_item_outcome", {
       _work_item_id: data.work_item_id,
       _final_status: data.final_status,
       _actual_resource_id: data.actual_resource_id ?? null,

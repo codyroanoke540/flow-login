@@ -40,7 +40,7 @@ async function requireUser(request: Request): Promise<{ userId: string; supabase
   if (settingsError) throw new Error("AI Employee is not configured");
   const flags = (settings?.feature_flags ?? {}) as Record<string, unknown>;
   if (flags.ai_employee_enabled !== true) throw new Error("AI Employee is disabled");
-  return { userId, supabase };
+  return { userId, supabase: supabase as any };
 }
 
 export const Route = createFileRoute("/api/ai-employee")({
