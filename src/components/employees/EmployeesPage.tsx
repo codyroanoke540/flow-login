@@ -18,12 +18,14 @@ import {
   upsertResource,
 } from "@/lib/cadence.functions";
 import { ResourceEditor } from "./ResourceEditor";
+import { useTerminology } from "@/lib/terminology";
 
 function initialsOf(name: string) {
   return name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 }
 
 export function EmployeesPage() {
+  const t = useTerminology();
   const listFn = useServerFn(listResources);
   const listAvailFn = useServerFn(listAvailability);
   const listQualFn = useServerFn(listResourceQualifications);
